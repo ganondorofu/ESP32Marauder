@@ -421,6 +421,22 @@ void setup()
   wifi_scan_obj.StartScan(WIFI_SCAN_OFF);
   
   cli_obj.RunSetup();
+
+  // --- Jumper-triggered auto BLE spam ---
+  // GPIO13 + GND short  → Apple spam
+  // GPIO12 + GND short  → All spam (Samsung/Apple/Google/Microsoft/FlipperZero rotated)
+  // (GPIO12 is a boot strap pin - LOW at boot = 3.3V flash, which is the safe default.)
+  pinMode(13, INPUT_PULLUP);
+  pinMode(12, INPUT_PULLUP);
+  delay(50);
+  if (digitalRead(12) == LOW) {
+    Serial.println(F("[AutoSpam] GPIO12 grounded - starting BLE Spam All"));
+    wifi_scan_obj.StartScan(BT_ATTACK_SPAM_ALL);
+  }
+  else if (digitalRead(13) == LOW) {
+    Serial.println(F("[AutoSpam] GPIO13 grounded - starting Apple BLE spam"));
+    wifi_scan_obj.StartScan(BT_ATTACK_SOUR_APPLE);
+  }
 }
 
 

