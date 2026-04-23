@@ -246,12 +246,13 @@ void setup()
 
   Serial.begin(115200);
 
-  while(!Serial)
-    delay(10);
+  // Skip `while(!Serial)` — on ESP32 classic UART (LOLIN D32 / MARAUDER_V4),
+  // HardwareSerial::operator bool() always returns true, so the loop is a no-op.
+  // Removing it for clarity and to avoid accidental blocking on native-USB variants.
 
   #ifdef HAS_C5_SD
     sharedSPI.begin(SD_SCK, SD_MISO, SD_MOSI);
-    delay(100);
+    delay(5);  // was 100
   #endif
 
   #ifdef defined(MARAUDER_M5STICKC) && !defined(MARAUDER_M5STICKCP2)
@@ -281,11 +282,11 @@ void setup()
   #if defined(HAS_SD) && !defined(HAS_C5_SD)
     pinMode(SD_CS, OUTPUT);
 
-    delay(10);
-  
+    delayMicroseconds(500);  // was delay(10)
+
     digitalWrite(SD_CS, HIGH);
 
-    delay(10);
+    delayMicroseconds(500);  // was delay(10)
   #endif
 
   //Serial.begin(115200);
@@ -428,7 +429,7 @@ void setup()
   // (GPIO12 is a boot strap pin - LOW at boot = 3.3V flash, which is the safe default.)
   pinMode(13, INPUT_PULLUP);
   pinMode(12, INPUT_PULLUP);
-  delay(50);
+  delayMicroseconds(500);  // was delay(50); internal pullup settles in <100us
   if (digitalRead(12) == LOW) {
     Serial.println(F("[AutoSpam] GPIO12 grounded - starting BLE Spam All"));
     wifi_scan_obj.StartScan(BT_ATTACK_SPAM_ALL);
