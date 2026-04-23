@@ -1,4 +1,5 @@
 #include "esp_random.h"
+#include "esp_bt.h"
 #include "WiFiScan.h"
 #include "lang_var.h"
 
@@ -4769,7 +4770,13 @@ void WiFiScan::executeBLESpam(EBLEPayloadType type) {
         generateRandomMac(smac);
         esp_base_mac_addr_set(smac);
         NimBLEDevice::init("");
-        NimBLEDevice::setPower(ESP_PWR_LVL_P9);  // max radio TX (+9 dBm) for strong RSSI
+        // Force MAX TX power on every BLE power slot (default + adv + scan).
+        // setPower(dbm) alone only covers the "default" type; advertising uses a separate power slot
+        // in the ESP32 BT controller. Cover all of them so the radio actually transmits at +9 dBm.
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_ADV);
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_SCAN);
+        esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P9);  // belt & suspenders via raw IDF API
         NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
         NimBLEServer *pServer = NimBLEDevice::createServer();
         pAdvertising = pServer->getAdvertising();
@@ -4847,7 +4854,10 @@ void WiFiScan::executeBLESpam(EBLEPayloadType type) {
         generateRandomMac(smac);
         esp_base_mac_addr_set(smac);
         NimBLEDevice::init("");
-        NimBLEDevice::setPower(ESP_PWR_LVL_P9);  // max radio TX (+9 dBm) for strong RSSI
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_ADV);
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_SCAN);
+        esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P9);
         NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
         NimBLEServer *pServer = NimBLEDevice::createServer();
         pAdvertising = pServer->getAdvertising();
