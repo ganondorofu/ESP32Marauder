@@ -10481,12 +10481,28 @@ void WiFiScan::main(uint32_t currentTime)
         // target's BLE scanner to dedupe/drop the single relevant type.
         // Giving each type dedicated airtime per tick fixes the "only 1
         // notification" behavior.
+        //
+        // Weighted rotation (10 slots, ~15s per full cycle):
+        //   Apple/Apple2 = 4/10  (covers most consumer devices: iPhone/iPad/Mac)
+        //   Google       = 3/10  (covers Android via FastPair)
+        //   Samsung/Microsoft/FlipperZero = 1/10 each
         static uint8_t sink_cursor = 0;
         const EBLEPayloadType sink_cycle[] = {
-          Google, Samsung, Microsoft, Apple, Apple2, FlipperZero
+          Apple, Google, Apple2, Samsung,
+          Apple, Google, Apple2, Microsoft,
+          Google, FlipperZero
         };
-        this->executeBLESpam(sink_cycle[sink_cursor]);
-        sink_cursor = (sink_cursor + 1) % (sizeof(sink_cycle) / sizeof(sink_cycle[0]));
+        const char* sink_names[] = {
+          "Apple", "Google", "Apple2", "Samsung",
+          "Apple", "Google", "Apple2", "Microsoft",
+          "Google", "FlipperZero"
+        };
+        const uint8_t sink_len = sizeof(sink_cycle) / sizeof(sink_cycle[0]);
+        EBLEPayloadType t = sink_cycle[sink_cursor];
+        Serial.printf("[SINK] slot=%u/%u -> %s\n",
+                      sink_cursor, sink_len, sink_names[sink_cursor]);
+        this->executeBLESpam(t);
+        sink_cursor = (sink_cursor + 1) % sink_len;
       }
       else {
         if (currentScanMode == BT_ATTACK_GOOGLE_SPAM)
