@@ -10454,32 +10454,42 @@ void WiFiScan::main(uint32_t currentTime)
         #endif
       }
 
-      if ((currentScanMode == BT_ATTACK_GOOGLE_SPAM) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(Google);
+      if (currentScanMode == BT_ATTACK_SPAM_ALL) {
+        // Kitchen Sink: rotate one payload type per tick instead of blasting all
+        // 6 types back-to-back. On mixed-vendor targets (e.g. Motorola only
+        // consumes FastPair), packing all 6 types into every tick causes the
+        // target's BLE scanner to dedupe/drop the single relevant type.
+        // Giving each type dedicated airtime per tick fixes the "only 1
+        // notification" behavior.
+        static uint8_t sink_cursor = 0;
+        const EBLEPayloadType sink_cycle[] = {
+          Google, Samsung, Microsoft, Apple, Apple2, FlipperZero
+        };
+        this->executeBLESpam(sink_cycle[sink_cursor]);
+        sink_cursor = (sink_cursor + 1) % (sizeof(sink_cycle) / sizeof(sink_cycle[0]));
+      }
+      else {
+        if (currentScanMode == BT_ATTACK_GOOGLE_SPAM)
+          this->executeBLESpam(Google);
 
-      if ((currentScanMode == BT_ATTACK_SAMSUNG_SPAM) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(Samsung);
+        if (currentScanMode == BT_ATTACK_SAMSUNG_SPAM)
+          this->executeBLESpam(Samsung);
 
-      if ((currentScanMode == BT_ATTACK_SWIFTPAIR_SPAM) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(Microsoft);
+        if (currentScanMode == BT_ATTACK_SWIFTPAIR_SPAM)
+          this->executeBLESpam(Microsoft);
 
-      if ((currentScanMode == BT_ATTACK_SOUR_APPLE) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(Apple);
+        if (currentScanMode == BT_ATTACK_SOUR_APPLE)
+          this->executeBLESpam(Apple);
 
-      if ((currentScanMode == BT_ATTACK_APPLE_JUICE) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(Apple2);
+        if (currentScanMode == BT_ATTACK_APPLE_JUICE)
+          this->executeBLESpam(Apple2);
 
-      if ((currentScanMode == BT_ATTACK_FLIPPER_SPAM) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(FlipperZero);
-      
-      if (currentScanMode == BT_SPOOF_AIRTAG)
-        this->executeBLESpam(Airtag);
+        if (currentScanMode == BT_ATTACK_FLIPPER_SPAM)
+          this->executeBLESpam(FlipperZero);
+
+        if (currentScanMode == BT_SPOOF_AIRTAG)
+          this->executeBLESpam(Airtag);
+      }
 
     #endif
   }
