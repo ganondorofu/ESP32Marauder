@@ -8,7 +8,7 @@
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "https://github.com/ganondorofu/ESP32Marauder/releases/download/v1.11.1-ganondorofu-17441b9/esp32_marauder.ino.merged.bin",
+          "path": "firmware.bin",
           "offset": 0
         }
       ]
