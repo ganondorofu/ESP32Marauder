@@ -6,6 +6,7 @@
 #include <MicroNMEA.h>
 #include <SoftwareSerial.h>
 #include <LinkedList.h>
+#include <string>
 
 #include "configs.h"
 

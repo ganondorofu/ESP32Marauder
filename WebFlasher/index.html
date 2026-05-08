@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32 Marauder Flasher</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0a0a;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  h1 { color: #ff4444; font-size: 1.4rem; letter-spacing: 2px; margin-bottom: 4px; }
+  .sub { color: #666; font-size: 0.75rem; margin-bottom: 32px; }
+
+  .variants { display: flex; gap: 16px; margin-bottom: 28px; }
+  .variant-card {
+    flex: 1;
+    border: 2px solid #222;
+    border-radius: 8px;
+    padding: 20px 16px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    max-width: 240px;
+    text-align: center;
+  }
+  .variant-card:hover { border-color: #444; background: #111; }
+  .variant-card.selected { border-color: #ff4444; background: #1a0000; }
+  .variant-card input[type=radio] { display: none; }
+  .variant-title { font-size: 0.95rem; font-weight: bold; margin-bottom: 6px; }
+  .variant-desc { font-size: 0.72rem; color: #888; line-height: 1.5; }
+
+  .section { width: 100%; max-width: 500px; margin-bottom: 18px; }
+  .section-label {
+    font-size: 0.72rem; color: #666; text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 8px;
+  }
+
+  .file-row {
+    display: flex; align-items: center; gap: 10px;
+    background: #111; border: 1px solid #222; border-radius: 6px;
+    padding: 10px 14px; margin-bottom: 8px;
+  }
+  .file-row .addr { color: #ff4444; font-size: 0.78rem; width: 56px; flex-shrink: 0; }
+  .file-row .fname { color: #aaa; font-size: 0.78rem; flex: 1; }
+  .file-row .status { font-size: 0.72rem; width: 60px; text-align: right; }
+  .status.ok { color: #44ff88; }
+  .status.missing { color: #ff6644; }
+  .status.loading { color: #ffcc44; }
+
+  .firmware-input-row {
+    display: flex; align-items: center; gap: 10px;
+    background: #111; border: 1px solid #333; border-radius: 6px;
+    padding: 10px 14px; margin-bottom: 8px;
+  }
+  .firmware-input-row label { color: #aaa; font-size: 0.78rem; flex: 1; }
+  .firmware-input-row input[type=file] { font-size: 0.72rem; color: #ccc; }
+
+  .btn-row { display: flex; gap: 12px; margin-top: 8px; }
+  button {
+    padding: 11px 28px;
+    border: none; border-radius: 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem; cursor: pointer;
+    letter-spacing: 1px; font-weight: bold;
+    transition: opacity 0.15s;
+  }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  #btn-connect { background: #333; color: #ccc; }
+  #btn-connect.connected { background: #1a3a1a; color: #44ff88; }
+  #btn-flash  { background: #ff4444; color: #fff; }
+
+  #log {
+    width: 100%; max-width: 500px;
+    background: #050505; border: 1px solid #1a1a1a; border-radius: 6px;
+    padding: 12px; height: 160px; overflow-y: auto;
+    font-size: 0.72rem; line-height: 1.6; color: #888;
+    margin-top: 8px;
+  }
+  #log .err { color: #ff6644; }
+  #log .ok  { color: #44ff88; }
+  #log .info { color: #aaccff; }
+
+  progress {
+    width: 100%; height: 6px; margin-top: 8px;
+    accent-color: #ff4444;
+  }
+</style>
+</head>
+<body>
+
+<h1>ESP32 MARAUDER FLASHER</h1>
+<p class="sub">WebSerial — Chrome 89+ required</p>
+
+<!-- Firmware variant selector -->
+<div class="variants">
+  <label class="variant-card selected" id="card-marauder">
+    <input type="radio" name="variant" value="marauder" checked>
+    <div class="variant-title">ESP32 Marauder</div>
+    <div class="variant-desc">Full firmware<br>WiFi / BLE suite</div>
+  </label>
+  <label class="variant-card" id="card-apple_spam">
+    <input type="radio" name="variant" value="apple_spam">
+    <div class="variant-title">Apple Spam Only</div>
+    <div class="variant-desc">Boot-to-spam<br>Apple Continuity BLE only<br>Max TX power</div>
+  </label>
+</div>
+
+<!-- Flash file status -->
+<div class="section">
+  <div class="section-label">Flash layout</div>
+  <div class="file-row"><span class="addr">0x1000</span><span class="fname">bootloader.bin</span><span class="status" id="st-boot">—</span></div>
+  <div class="file-row"><span class="addr">0x8000</span><span class="fname">partitions.bin</span><span class="status" id="st-part">—</span></div>
+  <div class="file-row"><span class="addr">0xE000</span><span class="fname">boot_app0.bin</span><span class="status" id="st-app0">—</span></div>
+  <div class="file-row"><span class="addr">0x10000</span><span class="fname" id="fw-name">firmware.bin</span><span class="status" id="st-fw">—</span></div>
+</div>
+
+<!-- Firmware .bin file picker (required) -->
+<div class="section">
+  <div class="section-label">コンパイル済みファームウェア (.bin)</div>
+  <div class="firmware-input-row">
+    <label id="fw-label">Arduino IDE でビルドした firmware.bin を選択</label>
+    <input type="file" id="fw-file" accept=".bin">
+  </div>
+</div>
+
+<!-- Actions -->
+<div class="section">
+  <div class="btn-row">
+    <button id="btn-connect">接続</button>
+    <button id="btn-flash" disabled>書き込み</button>
+  </div>
+  <progress id="prog" value="0" max="100" style="display:none"></progress>
+</div>
+
+<div id="log"></div>
+
+<script type="module">
+// esptool-js via CDN (ESM bundle)
+const ESPTOOL_URL = 'https://cdn.jsdelivr.net/npm/esptool-js@0.4.3/bundle.js';
+
+const VARIANTS = {
+  marauder:   { label: 'ESP32 Marauder',    fwName: 'marauder_firmware.bin',    dir: 'bins/marauder/' },
+  apple_spam: { label: 'Apple Spam Only',   fwName: 'apple_spam_firmware.bin',  dir: 'bins/apple_spam/' },
+};
+const OFFSETS = { boot: 0x1000, part: 0x8000, app0: 0xE000, fw: 0x10000 };
+
+// ---- State ----
+let port = null;
+let transport = null;
+let esploader = null;
+let ESPLoader = null;
+let Transport = null;
+let currentVariant = 'marauder';
+let fwData = null; // user-supplied firmware ArrayBuffer
+
+// ---- DOM ----
+const log      = document.getElementById('log');
+const btnConn  = document.getElementById('btn-connect');
+const btnFlash = document.getElementById('btn-flash');
+const prog     = document.getElementById('prog');
+const fwFile   = document.getElementById('fw-file');
+
+function addLog(msg, cls = '') {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = msg;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ---- Load esptool-js ----
+async function loadEsptool() {
+  if (ESPLoader) return;
+  addLog('esptool-js を読み込み中...', 'info');
+  try {
+    const mod = await import(ESPTOOL_URL);
+    ESPLoader = mod.ESPLoader;
+    Transport = mod.Transport;
+    addLog('esptool-js OK', 'ok');
+  } catch(e) {
+    addLog('esptool-js 読み込み失敗: ' + e.message, 'err');
+    throw e;
+  }
+}
+
+// ---- Variant switching ----
+document.querySelectorAll('input[name=variant]').forEach(r => {
+  r.addEventListener('change', () => {
+    currentVariant = r.value;
+    document.querySelectorAll('.variant-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById('card-' + currentVariant).classList.add('selected');
+    fwData = null;
+    fwFile.value = '';
+    updateFileStatus();
+    updateFlashBtn();
+  });
+});
+
+// ---- Firmware file picker ----
+fwFile.addEventListener('change', async () => {
+  const file = fwFile.files[0];
+  if (!file) { fwData = null; updateFileStatus(); updateFlashBtn(); return; }
+  fwData = await file.arrayBuffer();
+  addLog('firmware.bin 読み込み: ' + file.name + ' (' + (fwData.byteLength / 1024).toFixed(1) + ' KB)', 'ok');
+  updateFileStatus();
+  updateFlashBtn();
+});
+
+async function fetchBin(url, stEl) {
+  stEl.textContent = '...';
+  stEl.className = 'status loading';
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.status);
+    const buf = await r.arrayBuffer();
+    stEl.textContent = 'OK';
+    stEl.className = 'status ok';
+    return buf;
+  } catch(e) {
+    stEl.textContent = 'なし';
+    stEl.className = 'status missing';
+    return null;
+  }
+}
+
+function updateFileStatus() {
+  const v = VARIANTS[currentVariant];
+  document.getElementById('fw-name').textContent = v.fwName;
+  document.getElementById('fw-label').textContent =
+    'Arduino IDE でビルドした ' + v.fwName + ' を選択';
+
+  // Auto-fetch shared bins from server
+  const dir = v.dir;
+  fetchBin(dir + 'bootloader.bin', document.getElementById('st-boot'));
+  fetchBin(dir + 'partitions.bin', document.getElementById('st-part'));
+  fetchBin(dir + 'boot_app0.bin',  document.getElementById('st-app0'));
+
+  const stFw = document.getElementById('st-fw');
+  stFw.textContent = fwData ? 'OK' : '未選択';
+  stFw.className   = 'status ' + (fwData ? 'ok' : 'missing');
+}
+
+function updateFlashBtn() {
+  btnFlash.disabled = !(port && fwData);
+}
+
+// ---- Connect ----
+btnConn.addEventListener('click', async () => {
+  if (port) {
+    // Disconnect
+    try { await transport?.disconnect(); } catch(_) {}
+    port = null; transport = null; esploader = null;
+    btnConn.textContent = '接続';
+    btnConn.classList.remove('connected');
+    addLog('切断しました');
+    updateFlashBtn();
+    return;
+  }
+
+  if (!('serial' in navigator)) {
+    addLog('WebSerial 未対応です。Chrome 89+ を使用してください。', 'err');
+    return;
+  }
+
+  try {
+    await loadEsptool();
+    port = await navigator.serial.requestPort();
+    addLog('ポート選択 OK', 'ok');
+    btnConn.textContent = '切断';
+    btnConn.classList.add('connected');
+    updateFlashBtn();
+  } catch(e) {
+    addLog('接続エラー: ' + e.message, 'err');
+    port = null;
+  }
+});
+
+// ---- Flash ----
+btnFlash.addEventListener('click', async () => {
+  if (!port || !fwData) return;
+
+  btnFlash.disabled = true;
+  btnConn.disabled  = true;
+  prog.style.display = '';
+  prog.value = 0;
+  addLog('--- フラッシュ開始 (' + VARIANTS[currentVariant].label + ') ---', 'info');
+
+  const dir = VARIANTS[currentVariant].dir;
+
+  // Fetch shared bins
+  const [bootBuf, partBuf, app0Buf] = await Promise.all([
+    fetchBin(dir + 'bootloader.bin', document.getElementById('st-boot')),
+    fetchBin(dir + 'partitions.bin', document.getElementById('st-part')),
+    fetchBin(dir + 'boot_app0.bin',  document.getElementById('st-app0')),
+  ]);
+
+  if (!bootBuf || !partBuf || !app0Buf) {
+    addLog('共有バイナリの取得に失敗しました。serve.bat でサーバーを起動してください。', 'err');
+    btnFlash.disabled = false;
+    btnConn.disabled  = false;
+    return;
+  }
+
+  function toBinaryStr(ab) {
+    const u8 = new Uint8Array(ab);
+    let s = '';
+    for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+    return s;
+  }
+
+  const fileArray = [
+    { data: toBinaryStr(bootBuf), address: OFFSETS.boot },
+    { data: toBinaryStr(partBuf), address: OFFSETS.part },
+    { data: toBinaryStr(app0Buf), address: OFFSETS.app0 },
+    { data: toBinaryStr(fwData),  address: OFFSETS.fw   },
+  ];
+
+  const terminal = {
+    clean: () => {},
+    writeLine: (s) => addLog(s),
+    write: (s) => addLog(s),
+  };
+
+  try {
+    transport = new Transport(port, true);
+    esploader = new ESPLoader({ transport, baudrate: 921600, terminal, debugLogging: false });
+
+    addLog('ESP32 に接続中 (ボードのRESETを押してください)...');
+    await esploader.main();
+    addLog('チップ検出: ' + esploader.chip.CHIP_NAME, 'ok');
+    prog.value = 10;
+
+    addLog('書き込み中...');
+    await esploader.write_flash({
+      fileArray,
+      flashSize: 'keep',
+      flashMode: 'keep',
+      flashFreq: 'keep',
+      eraseAll: false,
+      compress: true,
+      reportProgress: (idx, written, total) => {
+        prog.value = 10 + Math.floor(90 * written / total);
+      },
+    });
+
+    prog.value = 100;
+    addLog('書き込み完了！ リセット中...', 'ok');
+    await esploader.after_flash('hard_reset');
+    await transport.disconnect();
+    addLog('--- 完了 ---', 'ok');
+  } catch(e) {
+    addLog('エラー: ' + e.message, 'err');
+  }
+
+  btnFlash.disabled = false;
+  btnConn.disabled  = false;
+});
+
+// Init
+updateFileStatus();
+</script>
+</body>
+</html>
